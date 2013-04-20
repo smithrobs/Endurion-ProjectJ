@@ -41,7 +41,7 @@ JOYSTICK_PORT_II        = $dc00
 
 CIA_PRA                 = $dd00
 
-START_LEVEL             = 1
+START_LEVEL             = 0
 
 
 ;placeholder for various temp parameters
@@ -5347,8 +5347,8 @@ BehaviourFrankenstein
 
           ;moving
           jsr GenerateRandomNumber
-          cmp #17
-          beq .Jump
+          cmp #3
+          bcc .Jump
           jmp .NormalWalk
           
 .OtherStates          
@@ -7187,9 +7187,23 @@ SpawnObject
           sta SPRITE_MOVE_POS_Y,x
           sta SPRITE_ANNOYED,x
           sta SPRITE_HITBACK,x
-          
+
           lda TYPE_START_STATE,y
           sta SPRITE_STATE,x
+
+          lda TYPE_START_DELTA_Y,y
+          sta PARAM10
+          sty PARAM9
+          
+.OffsetY          
+          beq .NoOffsetY
+          
+          jsr MoveSpriteUp
+          dec PARAM10
+          jmp .OffsetY
+          
+.NoOffsetY          
+          ldy PARAM9
           
           ;use start direction
           lda TYPE_START_DIRECTION,y
@@ -7241,7 +7255,7 @@ SpawnObject
           and #$01
 .SetDirY
           sta SPRITE_DIRECTION_Y,x
-
+          
           ;adjust enemy counter
           ldx PARAM3
           lda IS_TYPE_ENEMY,x
@@ -8997,6 +9011,34 @@ TYPE_START_STATE
           !byte 0             ;impala driver
           !byte 0             ;impala debris
           
+TYPE_START_DELTA_Y
+          !byte 0     ;dummy
+          !byte 0     ;player dean
+          !byte 0     ;bat 1
+          !byte 0     ;bat 1
+          !byte 0     ;bat 2
+          !byte 0     ;mummy
+          !byte 0     ;zombie
+          !byte 0     ;nasty bat
+          !byte 0     ;spider
+          !byte 0     ;explosion
+          !byte 0     ;player sam
+          !byte 0     ;wolf
+          !byte 0     ;ghost skeleton
+          !byte 0     ;jumping toad
+          !byte 0     ;eye
+          !byte 0     ;floating ghost
+          !byte 0     ;fly
+          !byte 0     ;slime
+          !byte 2     ;frankenstein
+          !byte 0     ;hand
+          !byte 0     ;devil
+          !byte 0     ;impala 1
+          !byte 0     ;impala 2
+          !byte 0     ;impala 3
+          !byte 0     ;impala driver
+          !byte 0     ;impala debris
+          
 BAT_ANIMATION
           !byte SPRITE_BAT_1
           !byte SPRITE_BAT_2
@@ -9207,6 +9249,13 @@ TEXT_STORY_1
           !text "RECURRING PATTERN EVERY 44 YEARS",59,"-"
           !text "WE SHOULD INVESTIGATE THE TOWN-"
           !text "CEMETARY",59,"*"
+          
+TEXT_STORY_2
+          !text "WE GOT A HINT BY OTHER HUNTERS-"
+          !text "ABOUT WEIRD VOICES AND SHRIEKS-"
+          !text "IN THE WOODS",59," THERE ALSO-"
+          !text "SEEM TO BE SOME MISSING-"
+          !text "HIKERS",59,"*"
           
 COLOR_FADE_POS
           !byte 0

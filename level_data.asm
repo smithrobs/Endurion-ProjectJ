@@ -104,6 +104,8 @@ SN_SCREEN_DATA_TABLE
           !word SN_LEVEL_6
           !word SN_LEVEL_7
           !word SN_LEVEL_8
+          !word SN_LEVEL_9
+          !word SN_LEVEL_10
           !word 0
 
 
@@ -221,8 +223,8 @@ SN_LEVEL_4
           !byte LD_LINE_H,4,14,8,110,2
           !byte LD_END
 SN_LEVEL_5
-          !byte LD_AREA,4,14,8,5,93,2
-          !byte LD_AREA,28,10,8,5,93,2
+          !byte LD_AREA,5,14,6,5,93,2
+          !byte LD_AREA,29,10,6,5,93,2
           !byte LD_LINE_H_ALT,1,19,14,210,13
           !byte LD_LINE_H_ALT,24,15,15,210,13
           !byte LD_LINE_H_ALT,15,13,9,210,13
@@ -341,5 +343,85 @@ SN_LEVEL_8
           !byte LD_ELEMENT,2,19,EL_SN_FENCE_1
           !byte LD_ELEMENT,22,12,EL_SN_TREE_1
           !byte LD_ELEMENT,6,5,EL_SN_MOON
+          !byte LD_END
+SN_LEVEL_9
+          !byte LD_ELEMENT_AREA,1,19,3,1,EL_SN_FENCE_1
+          !byte LD_LINE_H_ALT,1,21,38,196,13
+          !byte LD_AREA,13,10,26,11,93,2
+          !byte LD_LINE_H,13,9,26,92,2
+          !byte LD_LINE_H,12,8,27,110,2
+          !byte LD_LINE_H,12,7,27,110,2
+          !byte LD_LINE_H_ALT,7,18,6,160,13
+          !byte LD_LINE_H_ALT,12,15,6,160,13
+          !byte LD_LINE_H_ALT,17,12,6,160,13
+          !byte LD_LINE_H_ALT,22,15,6,160,13
+          !byte LD_LINE_H_ALT,27,18,6,160,13
+          !byte LD_LINE_H,22,16,6,92,2
+          !byte LD_LINE_H,27,19,6,92,2
+          !byte LD_LINE_H,17,13,6,92,2
+          !byte LD_LINE_H,13,16,5,92,2
+          !byte LD_LINE_H_ALT,2,8,6,160,13
+          !byte LD_LINE_H_ALT,32,8,6,160,13
+          !byte LD_LINE_H_ALT,7,10,11,160,13
+          !byte LD_LINE_H_ALT,22,10,11,160,13
+          !byte LD_LINE_H,22,11,11,92,2
+          !byte LD_LINE_H,13,11,5,92,2
+          !byte LD_ELEMENT,34,3,EL_SN_MOON
+          !byte LD_OBJECT,3,20,TYPE_PLAYER_DEAN
+          !byte LD_OBJECT,36,20,TYPE_PLAYER_SAM
+          !byte LD_SPAWN_SPOT,19,20,TYPE_MUMMY,4
+          !byte LD_SPAWN_SPOT,12,9,TYPE_ZOMBIE,3
+          !byte LD_SPAWN_SPOT,27,9,TYPE_ZOMBIE,3
+          !byte LD_SPAWN_SPOT,19,11,TYPE_FRANKENSTEIN,4
+          !byte LD_END
+SN_LEVEL_10
+          !byte LD_AREA,6,3,28,12,93,2
+          !byte LD_ELEMENT,18,10,EL_SN_TOMB_DOOR
+          !byte LD_ELEMENT,20,10,EL_SN_TOMB_DOOR
+          !byte LD_LINE_H,6,3,28,92,2
+          !byte LD_LINE_H,17,13,6,92,2
+          !byte LD_LINE_H,16,14,8,92,2
+          !byte LD_LINE_V,8,3,12,95,2
+          !byte LD_LINE_V,7,3,12,95,2
+          !byte LD_AREA,1,15,38,6,3,13
+          !byte LD_LINE_V,31,3,12,95,2
+          !byte LD_LINE_V,32,3,12,95,2
+          !byte LD_LINE_H,5,2,30,110,2
+          !byte LD_LINE_H,6,1,28,110,2
+          !byte LD_LINE_H_ALT,1,5,8,160,13
+          !byte LD_LINE_H_ALT,31,5,8,160,13
+          !byte LD_LINE_H_ALT,4,8,8,160,13
+          !byte LD_LINE_H_ALT,28,8,8,160,13
+          !byte LD_LINE_H_ALT,8,11,8,160,13
+          !byte LD_LINE_H_ALT,24,11,8,160,13
+          !byte LD_LINE_H_ALT,5,14,6,160,13
+          !byte LD_LINE_H_ALT,29,14,6,160,13
+          !byte LD_LINE_H_ALT,2,17,6,160,13
+          !byte LD_LINE_H_ALT,32,17,6,160,13
+          !byte LD_LINE_H_ALT,15,15,10,160,13
+          !byte LD_LINE_H_ALT,7,19,8,160,13
+          !byte LD_LINE_H_ALT,25,19,8,160,13
+          !byte LD_LINE_H_ALT,1,21,38,196,13
+          !byte LD_OBJECT,10,18,TYPE_PLAYER_DEAN
+          !byte LD_OBJECT,29,18,TYPE_PLAYER_SAM
+          !byte LD_SPAWN_SPOT,3,20,TYPE_FRANKENSTEIN,4
+          !byte LD_SPAWN_SPOT,36,20,TYPE_FRANKENSTEIN,4
+          !byte LD_SPAWN_SPOT,27,10,TYPE_FRANKENSTEIN,4
+          !byte LD_SPAWN_SPOT,12,10,TYPE_FRANKENSTEIN,4
+          !byte LD_LINE_H_ALT,13,6,14,160,13
+          !byte LD_LINE_H,13,7,14,92,2
+          !byte LD_LINE_H,6,6,3,92,2
+          !byte LD_LINE_H,31,6,3,92,2
+          !byte LD_LINE_H,6,9,6,92,2
+          !byte LD_LINE_H,28,9,6,92,2
+          !byte LD_LINE_H,8,12,8,92,2
+          !byte LD_LINE_H,24,12,8,92,2
+          !byte LD_LINE_H,29,15,6,32,2
+          !byte LD_LINE_H,5,15,6,32,2
+          !byte LD_LINE_H,15,16,10,32,2
+          !byte LD_LINE_H,2,18,6,32,2
+          !byte LD_LINE_H,32,18,6,32,2
+          !byte LD_LINE_H,25,20,8,32,2
+          !byte LD_LINE_H,7,20,8,32,2
           !byte LD_END
 
