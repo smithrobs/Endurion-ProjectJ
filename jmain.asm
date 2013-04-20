@@ -75,6 +75,14 @@ TYPE_ENEMY_UD           = 3
 
 OBJECT_HEIGHT           = 8 * 2
 
+;item type constants
+ITEM_BULLET             = 0
+ITEM_HEALTH             = 1
+ITEM_NONE               = 255
+
+;number of possible items
+ITEM_COUNT              = 8
+
 ;this creates a basic start
 *=$0801
 
@@ -570,6 +578,8 @@ FireShot
           
 .EnemyKilled          
           jsr RemoveObject
+          
+          jsr SpawnItem
           jmp .ShotDone
           
 .CheckNextEnemy     
@@ -582,6 +592,99 @@ FireShot
 .ShotDone          
           rts
 
+;------------------------------------------------------------
+;spawns an item at char position from object x
+;X = object index
+;------------------------------------------------------------
+!zone SpawnItem
+SpawnItem
+          ;find free item slot
+          ldy #0
+          
+.CheckNextItemSlot          
+          lda ITEM_ACTIVE,y
+          cmp #ITEM_NONE
+          beq .FreeSlotFound
+          iny
+          cpy #ITEM_COUNT
+          bne .CheckNextItemSlot
+          rts
+          
+.FreeSlotFound          
+          jsr GenerateRandomNumber
+          and #$01
+          
+          sta ITEM_ACTIVE,y
+          lda SPRITE_CHAR_POS_X,x
+          sta ITEM_POS_X,y
+          lda SPRITE_CHAR_POS_Y,x
+          sta ITEM_POS_Y,y
+
+          sty PARAM1
+          
+          tay
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          sta ZEROPAGE_POINTER_2
+          lda SCREEN_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+          clc
+          adc #( ( SCREEN_COLOR - SCREEN_CHAR ) & 0xff00 ) >> 8
+          sta ZEROPAGE_POINTER_2 + 1
+          
+          ldy SPRITE_CHAR_POS_X,x
+          ldx PARAM1
+          
+          ;store old background and put item 
+          ;we don't take overlapping items in account yet!
+          lda (ZEROPAGE_POINTER_1),y
+          sta ITEM_BACK_CHAR_UL,x
+          lda (ZEROPAGE_POINTER_2),y
+          sta ITEM_BACK_COLOR_UL,x
+          
+          lda ITEM_CHAR_UL,x
+          sta (ZEROPAGE_POINTER_1),y
+          lda ITEM_COLOR_UL,x
+          sta (ZEROPAGE_POINTER_2),y
+          
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta ITEM_BACK_CHAR_UR,x
+          lda (ZEROPAGE_POINTER_2),y
+          sta ITEM_BACK_COLOR_UR,x
+
+          lda ITEM_CHAR_UR,x
+          sta (ZEROPAGE_POINTER_1),y
+          lda ITEM_COLOR_UR,x
+          sta (ZEROPAGE_POINTER_2),y
+          
+          tya
+          clc
+          adc #39
+          tay
+          lda (ZEROPAGE_POINTER_1),y
+          sta ITEM_BACK_CHAR_LL,x
+          lda (ZEROPAGE_POINTER_2),y
+          sta ITEM_BACK_COLOR_LL,x
+          
+          lda ITEM_CHAR_LL,x
+          sta (ZEROPAGE_POINTER_1),y
+          lda ITEM_COLOR_LL,x
+          sta (ZEROPAGE_POINTER_2),y
+          
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta ITEM_BACK_CHAR_LR,x
+          lda (ZEROPAGE_POINTER_2),y
+          sta ITEM_BACK_COLOR_LR,x
+          lda ITEM_CHAR_LR,x
+          sta (ZEROPAGE_POINTER_1),y
+          lda ITEM_COLOR_LR,x
+          sta (ZEROPAGE_POINTER_2),y
+
+          rts
+          
+          
 ;------------------------------------------------------------
 ;PlayerMoveLeft
 ;------------------------------------------------------------
@@ -1512,61 +1615,74 @@ ClearPlayScreen
 
 !zone DisplayText
 DisplayText
-            ldx PARAM2
-            lda SCREEN_LINE_OFFSET_TABLE_LO,x
-            sta ZEROPAGE_POINTER_2
-            sta ZEROPAGE_POINTER_3
-            lda SCREEN_LINE_OFFSET_TABLE_HI,x
-            sta ZEROPAGE_POINTER_2 + 1
-            clc
-            adc #( ( SCREEN_COLOR - SCREEN_CHAR ) & 0xff00 ) >> 8
-            sta ZEROPAGE_POINTER_3 + 1
+          ldx PARAM2
+          lda SCREEN_LINE_OFFSET_TABLE_LO,x
+          sta ZEROPAGE_POINTER_2
+          sta ZEROPAGE_POINTER_3
+          lda SCREEN_LINE_OFFSET_TABLE_HI,x
+          sta ZEROPAGE_POINTER_2 + 1
+          clc
+          adc #( ( SCREEN_COLOR - SCREEN_CHAR ) & 0xff00 ) >> 8
+          sta ZEROPAGE_POINTER_3 + 1
 
-            lda ZEROPAGE_POINTER_2
-            clc
-            adc PARAM1
-            sta ZEROPAGE_POINTER_2
-            lda ZEROPAGE_POINTER_2 + 1
-            adc #0
-            sta ZEROPAGE_POINTER_2 + 1
-            lda ZEROPAGE_POINTER_3
-            clc
-            adc PARAM1
-            sta ZEROPAGE_POINTER_3
-            lda ZEROPAGE_POINTER_3 + 1
-            adc #0
-            sta ZEROPAGE_POINTER_3 + 1
-            
-            ldy #0
-text_display_loop
-            lda (ZEROPAGE_POINTER_1),y
-            cmp #$2A
-            beq text_display_done
-            cmp #45
-            beq .LineBreak
-            sta (ZEROPAGE_POINTER_2),y
-            lda #1
-            sta (ZEROPAGE_POINTER_3),y
-            iny
-            jmp text_display_loop
+          lda ZEROPAGE_POINTER_2
+          clc
+          adc PARAM1
+          sta ZEROPAGE_POINTER_2
+          lda ZEROPAGE_POINTER_2 + 1
+          adc #0
+          sta ZEROPAGE_POINTER_2 + 1
+          lda ZEROPAGE_POINTER_3
+          clc
+          adc PARAM1
+          sta ZEROPAGE_POINTER_3
+          lda ZEROPAGE_POINTER_3 + 1
+          adc #0
+          sta ZEROPAGE_POINTER_3 + 1
+
+          ldy #0
+.InLineLoop
+          lda (ZEROPAGE_POINTER_1),y
+          cmp #$2A
+          beq .EndMarkerReached
+          cmp #45
+          beq .LineBreak
+          sta (ZEROPAGE_POINTER_2),y
+          lda #1
+          sta (ZEROPAGE_POINTER_3),y
+          iny
+          jmp .InLineLoop
         
 .LineBreak
-            iny
-            tya
-            clc
-            adc ZEROPAGE_POINTER_1
-            sta ZEROPAGE_POINTER_1
-            lda #0
-            adc ZEROPAGE_POINTER_1 + 1
-            sta ZEROPAGE_POINTER_1 + 1
-            
-            inc PARAM2
-            inc PARAM2
-            jmp DisplayText
-            
-text_display_done
-            rts
+          iny
+          tya
+          clc
+          adc ZEROPAGE_POINTER_1
+          sta ZEROPAGE_POINTER_1
+          lda #0
+          adc ZEROPAGE_POINTER_1 + 1
+          sta ZEROPAGE_POINTER_1 + 1
 
+          inc PARAM2
+          inc PARAM2
+          jmp DisplayText
+            
+.EndMarkerReached
+          rts
+
+
+;------------------------------------------------------------
+;generates a sometimes random number
+;------------------------------------------------------------
+!zone GenerateRandomNumber
+GenerateRandomNumber
+          lda $dc04
+          eor $dc05
+          eor $dd04
+          adc $dd05
+          eor $dd06
+          eor $dd07
+          rts
 
 ;------------------------------------------------------------
 ;copies charset from ZEROPAGE_POINTER_1 to ZEROPAGE_POINTER_2
@@ -1716,6 +1832,30 @@ SPRITE_ACTIVE
           !byte 0,0,0,0,0,0,0,0
 SPRITE_DIRECTION
           !byte 0,0,0,0,0,0,0,0
+          
+ITEM_ACTIVE
+          !fill ITEM_COUNT,ITEM_NONE
+ITEM_POS_X
+          !fill ITEM_COUNT,0
+ITEM_POS_Y
+          !fill ITEM_COUNT,0
+          
+ITEM_BACK_CHAR_UL            
+          !fill ITEM_COUNT,0
+ITEM_BACK_COLOR_UL
+          !fill ITEM_COUNT,0
+ITEM_BACK_CHAR_UR            
+          !fill ITEM_COUNT,0
+ITEM_BACK_COLOR_UR
+          !fill ITEM_COUNT,0
+ITEM_BACK_CHAR_LL            
+          !fill ITEM_COUNT,0
+ITEM_BACK_COLOR_LL
+          !fill ITEM_COUNT,0
+ITEM_BACK_CHAR_LR            
+          !fill ITEM_COUNT,0
+ITEM_BACK_COLOR_LR
+          !fill ITEM_COUNT,0
 
 ENEMY_BEHAVIOUR_TABLE_LO          
           !byte <PlayerControl
@@ -1732,6 +1872,23 @@ IS_TYPE_ENEMY
           !byte 0     ;player
           !byte 1     ;enemy_lr
           !byte 1     ;enemy_ud
+          
+ITEM_CHAR_UL
+          !byte 4,8
+ITEM_COLOR_UL
+          !byte 7,2
+ITEM_CHAR_UR
+          !byte 5,9
+ITEM_COLOR_UR
+          !byte 4,2
+ITEM_CHAR_LL
+          !byte 6,10
+ITEM_COLOR_LL
+          !byte 7,2
+ITEM_CHAR_LR
+          !byte 7,11
+ITEM_COLOR_LR
+          !byte 4,2
           
 BIT_TABLE
           !byte 1,2,4,8,16,32,64,128
