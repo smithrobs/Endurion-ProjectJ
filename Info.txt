@@ -1,0 +1,22 @@
+Project J - A public game tutorial
+==================================
+
+This is part of a write-a-game-tutorial published on the 
+Retro Remakes forum. It shows how to write a C64 game
+from scratch. 
+The used programs are the ACME cross-compiler and two
+selfmade sprite/charset editing programs.
+Don't expect perfect or even bug-free code.
+
+
+Details
+-------
+
+The memory layout for now is:
+
+$0801 -  2049 - game code
+$CC00 - 52224 - screen location
+$D000 - 53248 - sprite data
+$D800 - 55296 - color ram location
+$F000 - 61440 - charset data
+
