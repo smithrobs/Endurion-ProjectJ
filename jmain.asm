@@ -52,6 +52,9 @@ PARAM4                  = $06
 PARAM5                  = $07
 PARAM6                  = $08
 PARAM7                  = $09
+PARAM8                  = $0A
+PARAM9                  = $0B
+PARAM10                 = $0C
 
 ;placeholder for zero page pointers
 ZEROPAGE_POINTER_1      = $17
@@ -311,6 +314,9 @@ ITEM_BULLET             = 0
 ITEM_HEALTH             = 1
 ITEM_FAST_RELOAD        = 2
 ITEM_INVINCIBLE         = 3
+ITEM_FORCE_RANGE        = 4
+
+ITEM_MAX                = 5
 ITEM_NONE               = 255
 
 ;number of possible items
@@ -828,7 +834,7 @@ ShowStory
           
 .StoryLoop          
           jsr WaitFrame
-          
+         
           jsr ObjectControl
           ;ldx #0
           ;jsr MoveSpriteLeft
@@ -871,7 +877,23 @@ GameLoop
           ;sta 53280
 
           jsr WaitFrame
+
+          JSR $FFE4 ;GETIN
+          BEQ .NOCHEAT
+
+          CMP #49
+          bne .NOCHEAT
           
+          ;jump to next level
+          jsr StartLevel
+          
+          inc LEVEL_NR
+          jsr BuildScreen
+          
+          jsr CopyLevelToBackBuffer
+          jsr DisplayGetReady
+.NOCHEAT
+
           ;lda #1
           ;sta VIC_BORDER_COLOR
           lda LEVEL_START_DELAY
@@ -2250,9 +2272,12 @@ PickItem
           beq .EffectFastReload
           cmp #ITEM_INVINCIBLE
           beq .EffectInvincible
+          cmp #ITEM_FORCE_RANGE
+          beq .EffectIncForceRange
           
 .SamDoesNotUseBullets          
 .SamDoesNotUseFastReload
+.DeanDoesNotUseForce
 .RemoveItem          
           ldx PARAM6
           lda #ITEM_NONE
@@ -2313,6 +2338,24 @@ PickItem
           sta SPRITE_STATE,x
           jmp .RemoveItem
           
+.EffectIncForceRange
+          cpx #0
+          beq .DeanDoesNotUseForce
+          
+          lda PLAYER_FORCE_RANGE
+          clc
+          adc #2
+          sta PLAYER_FORCE_RANGE
+          
+          cmp #38
+          bcs .NotTooLong
+          
+          lda #38
+          sta PLAYER_FORCE_RANGE
+          
+.NotTooLong          
+          jmp .RemoveItem
+
 ;------------------------------------------------------------
 ;put item image on screen
 ;X = item index
@@ -2654,8 +2697,14 @@ SamUseForce
           sta ZEROPAGE_POINTER_1 + 1
           
           ldy SPRITE_CHAR_POS_X,x
+          lda #0
+          sta PARAM7
           
 .ShotContinue
+          lda PARAM7
+          cmp PLAYER_FORCE_RANGE
+          beq .OutOfRange
+          inc PARAM7
           ;y contains shot X pos
           ;PARAM6 contains x sprite index of player
           ldx PARAM6
@@ -2670,7 +2719,8 @@ SamUseForce
           beq .CheckHitEnemy
 
           ldx PARAM6
-.ShotDoneMiss          
+.ShotDoneMiss   
+.OutOfRange
           lda #0
 .ShotDoneHit          
           rts
@@ -2783,8 +2833,14 @@ SpawnItem
           
 .FreeSlotFound          
           jsr GenerateRandomNumber
-          and #$03
           
+          and #$07
+          cmp #ITEM_MAX
+          bcc .ItemOk
+          sec
+          sbc #ITEM_MAX
+          
+.ItemOk          
           sta ITEM_ACTIVE,y
           sta PARAM1
           
@@ -6783,9 +6839,11 @@ BuildScreen
           lda LEVEL_NR
           asl
           tax
-          lda SCREEN_DATA_TABLE,x
+          ;lda SCREEN_DATA_TABLE,x
+          lda SN_SCREEN_DATA_TABLE,x
           sta ZEROPAGE_POINTER_1
-          lda SCREEN_DATA_TABLE + 1,x
+          ;lda SCREEN_DATA_TABLE + 1,x
+          lda SN_SCREEN_DATA_TABLE + 1,x
           sta ZEROPAGE_POINTER_1 + 1
           beq .NoMoreLevels
           
@@ -7638,7 +7696,6 @@ DrawLevelElement
 
 !zone LevelElement
 LevelElement
-LevelElementArea
 
 
           ; !byte LD_ELEMENT,0,0,EL_BLUE_BRICK_4x3
@@ -7665,6 +7722,71 @@ LevelElementArea
           
           jmp NextLevelData
 
+
+!zone LevelElementArea
+LevelElementArea
+
+          ;!byte LD_ELEMENT_AREA,24,16,5,1,EL_SN_BROWN_ROCK
+          
+          ;X pos
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta PARAM1 
+          sta PARAM10
+          
+          ;Y pos
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta PARAM2
+
+          ;x count
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta PARAM7
+          sta PARAM9
+
+          ;y count
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta PARAM8
+
+          ;type
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta PARAM3
+
+          ;store y for later
+          tya
+          pha
+          
+.NextElementRow
+          jsr DrawLevelElement
+          
+          dec PARAM7
+          beq .RowDone
+          
+          lda PARAM1
+          clc
+          adc PARAM4
+          sta PARAM1
+          jmp .NextElementRow
+          
+.RowDone          
+          lda PARAM2
+          clc
+          adc PARAM5
+          sta PARAM2
+          
+          lda PARAM9
+          sta PARAM7
+          
+          lda PARAM10
+          sta PARAM1
+          
+          dec PARAM8
+          bne .NextElementRow
+
+          jmp NextLevelData
 
 
 !zone LevelElementH
@@ -8454,6 +8576,8 @@ PLAYER_INVINCIBLE
           !byte 0,0
 PLAYER_JOYSTICK_PORT
           !byte 0,1
+PLAYER_FORCE_RANGE
+          !byte 5
 
 SPRITE_HP
           !byte 0,0,0,0,0,0,0,0
@@ -9020,21 +9144,21 @@ DELAYED_GENERIC_COUNTER
           !byte 0
           
 ITEM_CHAR_UL
-          !byte 4,8,16,20
+          !byte 4,8,16,20,106
 ITEM_COLOR_UL
-          !byte 7,2,1,1
+          !byte 7,2,1,1,2
 ITEM_CHAR_UR
-          !byte 5,9,17,21
+          !byte 5,9,17,21,107
 ITEM_COLOR_UR
-          !byte 4,2,2,7
+          !byte 4,2,2,7,1
 ITEM_CHAR_LL
-          !byte 6,10,18,22
+          !byte 6,10,18,22,108
 ITEM_COLOR_LL
-          !byte 7,2,2,7
+          !byte 7,2,2,7,2
 ITEM_CHAR_LR
-          !byte 7,11,19,23
+          !byte 7,11,19,23,109
 ITEM_COLOR_LR
-          !byte 4,2,2,4
+          !byte 4,2,2,4,1
           
 PLAYER_START_POS_X
           !byte 0,0
