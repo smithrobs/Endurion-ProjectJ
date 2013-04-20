@@ -48,7 +48,7 @@ CIA_PRA                 = $dd00
 
 PROCESSOR_PORT          = $01
 
-START_LEVEL             = 32
+START_LEVEL             = 33
 
 MUSIC_IN_GAME_TUNE		    = $00
 MUSIC_TITLE_TUNE			     = $01
@@ -9785,10 +9785,23 @@ LevelElement
           iny
           lda (ZEROPAGE_POINTER_1),y
           sta PARAM2
+          
+          and #$80
+          beq +
+          
+          lda PARAM2
+          and #$7f
+          sta PARAM2
+          
+          lda PREVIOUS_ELEMENT
+          jmp ++
 
++
           ;type
           iny
           lda (ZEROPAGE_POINTER_1),y
+          sta PREVIOUS_ELEMENT
+++          
           sta PARAM3
 
           ;store y for later
@@ -9831,6 +9844,7 @@ LevelElementArea
           iny
           lda (ZEROPAGE_POINTER_1),y
           sta PARAM3
+          sta PREVIOUS_ELEMENT
 
           ;store y for later
           tya
@@ -9889,6 +9903,7 @@ LevelElementH
           iny
           lda (ZEROPAGE_POINTER_1),y
           sta PARAM3
+          sta PREVIOUS_ELEMENT
 
           ;store y for later
           tya
@@ -9933,6 +9948,7 @@ LevelElementV
           iny
           lda (ZEROPAGE_POINTER_1),y
           sta PARAM3
+          sta PREVIOUS_ELEMENT
 
           ;store y for later
           tya
@@ -11568,6 +11584,8 @@ GETREADY_SPRITE_X_POS
 GETREADY_SPRITE_COLOR
           !byte 2,3,4,5,6,7,8,9
 
+PREVIOUS_ELEMENT
+          !byte 255
 
 LEVEL_BORDER_DATA
           !byte LD_LINE_H_ALT,0,0,40,192,9
