@@ -360,8 +360,9 @@ ITEM_FAST_RELOAD        = 2
 ITEM_INVINCIBLE         = 3
 ITEM_FORCE_RANGE        = 4
 ITEM_SUPER_BULLET       = 5
+ITEM_DEMON_BLOOD        = 6
 
-ITEM_MAX                = 6
+ITEM_MAX                = 7
 ITEM_NONE               = 255
 
 ;number of possible items
@@ -785,6 +786,7 @@ TitleScreenWithoutIRQ
           lda #0
           sta PLAYER_RELOAD_SPEED
           sta SUPER_BULLET
+          sta DEMON_BLOOD
           lda #5
           sta PLAYER_FORCE_RANGE
           lda #2
@@ -2582,8 +2584,10 @@ PlayerControl
           ldy PLAYER_JOYSTICK_PORT,x
           lda JOYSTICK_PORT_II,y
           and #$10
-          bne .SamNotFirePushed
+          beq +
+          jmp .SamNotFirePushed
           
++          
           lda #1
           sta PLAYER_FIRE_PRESSED_TIME,x
           
@@ -2650,10 +2654,17 @@ PlayerControl
 
           lda #1
           jsr IncreaseScore
+          
+          lda DEMON_BLOOD
+          beq +
+          dec DEMON_BLOOD
+          jmp .EnemyKilled
 
++
           dec SPRITE_HP,x
           bne .EnemyWasHurt
           
+.EnemyKilled          
           lda #5
           jsr IncreaseScore
           
@@ -2901,9 +2912,13 @@ PickItem
           cmp #ITEM_INVINCIBLE
           beq .EffectInvincible
           cmp #ITEM_FORCE_RANGE
-          beq .EffectIncForceRange
+          bne +
+          jmp .EffectIncForceRange
++          
           cmp #ITEM_SUPER_BULLET
           beq .EffectSuperBullet
+          cmp #ITEM_DEMON_BLOOD
+          beq .EffectDemonBlood
           
 .SamDoesNotUseBullets          
 .SamDoesNotUseFastReload
@@ -2920,6 +2935,12 @@ PickItem
           
           ldx PARAM6
           rts
+
+.EffectDemonBlood
+          cpx #1
+          bne .DeanDoesNotUseForce
+          inc DEMON_BLOOD
+          jmp .RemoveItem
           
 .EffectSuperBullet          
           cpx #1
@@ -3723,6 +3744,9 @@ SpawnItem
           sbc #ITEM_MAX
           
 .ItemOk          
+
+          lda #ITEM_DEMON_BLOOD
+
           sta ITEM_ACTIVE,y
           sta PARAM1
           
@@ -4835,102 +4859,7 @@ BehaviourBatAttacking
           rts
           
  
-;------------------------------------------------------------
-;simply walk left/right, don't fall off
-;------------------------------------------------------------
-!zone BehaviourMummy
-BehaviourMummy
-          jsr HandleHitBack
-          beq .NoHitBack
-          rts
-          
-.NoHitBack          
-          jsr ObjectMoveDownBlocking
-          beq .NotFalling
-          rts
-          
-.NotFalling          
-          lda SPRITE_CHAR_POS_Y,x
-          cmp SPRITE_CHAR_POS_Y
-          bne .NoPlayerInSight
-          
-          ;player on same height
-          ;looking at the player?
-          jsr LookingAtPlayer
-          beq .NoPlayerInSight
 
-          lda #SPRITE_MUMMY_ATTACK_R
-          clc
-          adc SPRITE_DIRECTION,x
-          sta SPRITE_POINTER_BASE,x
-          
-          lda SPRITE_DIRECTION,x
-          beq .AttackRight
-          
-          ;attack to left
-          jsr ObjectMoveLeftBlocking
-          jsr ObjectMoveLeftBlocking
-          beq .ToggleDirection
-          rts
-          
-.AttackRight
-          ;attack to left
-          jsr ObjectMoveRightBlocking
-          jsr ObjectMoveRightBlocking
-          beq .ToggleDirection
-          rts
-
-.NoPlayerInSight
-          lda DELAYED_GENERIC_COUNTER
-          and #$03
-          beq .MovementUpdate
-          rts
-          
-.MovementUpdate
-          inc SPRITE_MOVE_POS,x
-          lda SPRITE_MOVE_POS,x
-          and #$03
-          sta SPRITE_MOVE_POS,x
-          
-          cmp #2
-          
-          bpl .CanMove
-
-          lda #SPRITE_MUMMY_R_2
-          clc
-          adc SPRITE_DIRECTION,x
-          sta SPRITE_POINTER_BASE,x
-          rts
-
-.CanMove
-          lda #SPRITE_MUMMY_R_1
-          clc
-          adc SPRITE_DIRECTION,x
-          sta SPRITE_POINTER_BASE,x
-          
-          lda SPRITE_DIRECTION,x
-          beq .MoveRight
-          
-          ;move left
-          jsr ObjectWalkLeft
-          beq .ToggleDirection
-          rts
-          
-.MoveRight
-          jsr ObjectWalkRight
-          beq .ToggleDirection
-          rts
-          
-.ToggleDirection
-          lda SPRITE_DIRECTION,x
-          eor #1
-          sta SPRITE_DIRECTION,x
-          clc
-          adc #SPRITE_MUMMY_R_1
-          sta SPRITE_POINTER_BASE,x
-          rts
- 
- 
  
           
  
@@ -5018,6 +4947,7 @@ BehaviourMummy
         !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
         !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 
+ 
  
 
 ;------------------------------------------------------------
@@ -5184,6 +5114,104 @@ SCREEN_BACK_LINE_OFFSET_TABLE_HI
 MUSIC_PLAYER
 !binary "music.bin",,2
 
+
+;------------------------------------------------------------
+;simply walk left/right, don't fall off
+;------------------------------------------------------------
+!zone BehaviourMummy
+BehaviourMummy
+          jsr HandleHitBack
+          beq .NoHitBack
+          rts
+          
+.NoHitBack          
+          jsr ObjectMoveDownBlocking
+          beq .NotFalling
+          rts
+          
+.NotFalling          
+          lda SPRITE_CHAR_POS_Y,x
+          cmp SPRITE_CHAR_POS_Y
+          bne .NoPlayerInSight
+          
+          ;player on same height
+          ;looking at the player?
+          jsr LookingAtPlayer
+          beq .NoPlayerInSight
+
+          lda #SPRITE_MUMMY_ATTACK_R
+          clc
+          adc SPRITE_DIRECTION,x
+          sta SPRITE_POINTER_BASE,x
+          
+          lda SPRITE_DIRECTION,x
+          beq .AttackRight
+          
+          ;attack to left
+          jsr ObjectMoveLeftBlocking
+          jsr ObjectMoveLeftBlocking
+          beq .ToggleDirection
+          rts
+          
+.AttackRight
+          ;attack to left
+          jsr ObjectMoveRightBlocking
+          jsr ObjectMoveRightBlocking
+          beq .ToggleDirection
+          rts
+
+.NoPlayerInSight
+          lda DELAYED_GENERIC_COUNTER
+          and #$03
+          beq .MovementUpdate
+          rts
+          
+.MovementUpdate
+          inc SPRITE_MOVE_POS,x
+          lda SPRITE_MOVE_POS,x
+          and #$03
+          sta SPRITE_MOVE_POS,x
+          
+          cmp #2
+          
+          bpl .CanMove
+
+          lda #SPRITE_MUMMY_R_2
+          clc
+          adc SPRITE_DIRECTION,x
+          sta SPRITE_POINTER_BASE,x
+          rts
+
+.CanMove
+          lda #SPRITE_MUMMY_R_1
+          clc
+          adc SPRITE_DIRECTION,x
+          sta SPRITE_POINTER_BASE,x
+          
+          lda SPRITE_DIRECTION,x
+          beq .MoveRight
+          
+          ;move left
+          jsr ObjectWalkLeft
+          beq .ToggleDirection
+          rts
+          
+.MoveRight
+          jsr ObjectWalkRight
+          beq .ToggleDirection
+          rts
+          
+.ToggleDirection
+          lda SPRITE_DIRECTION,x
+          eor #1
+          sta SPRITE_DIRECTION,x
+          clc
+          adc #SPRITE_MUMMY_R_1
+          sta SPRITE_POINTER_BASE,x
+          rts
+ 
+ 
+ 
 ;------------------------------------------------------------
 ;simply walk left/right, don't fall off
 ;------------------------------------------------------------
@@ -12618,23 +12646,25 @@ DELAYED_GENERIC_COUNTER_WO_WATER
           !byte 0
           
 ITEM_CHAR_UL
-          !byte 4,8,16,20,106,4
+          !byte 4,8,16,20,106,4,144
 ITEM_COLOR_UL
-          !byte 7,2,1,1,2,1
+          !byte 7,2,1,1,2,1,1
 ITEM_CHAR_UR
-          !byte 5,9,17,21,107,5
+          !byte 5,9,17,21,107,5,145
 ITEM_COLOR_UR
-          !byte 4,2,2,7,1,3
+          !byte 4,2,2,7,1,3,7
 ITEM_CHAR_LL
-          !byte 6,10,18,22,108,6
+          !byte 6,10,18,22,108,6,146
 ITEM_COLOR_LL
-          !byte 7,2,2,7,2,3
+          !byte 7,2,2,7,2,3,2
 ITEM_CHAR_LR
-          !byte 7,11,19,23,109,7
+          !byte 7,11,19,23,109,7,147
 ITEM_COLOR_LR
-          !byte 4,2,2,4,1,6
+          !byte 4,2,2,4,1,6,4
           
 SUPER_BULLET
+          !byte 0
+DEMON_BLOOD
           !byte 0
           
 PLAYER_START_POS_X
