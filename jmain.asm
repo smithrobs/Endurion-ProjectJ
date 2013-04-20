@@ -250,10 +250,12 @@ SPRITE_DEBRIS_2               = SPRITE_BASE + 133
 SPRITE_SPAWN_1                = SPRITE_BASE + 134
 SPRITE_SPAWN_2                = SPRITE_BASE + 135
 
-SPRITE_BOSS_R_1               = SPRITE_BASE + 136
-SPRITE_BOSS_R_2               = SPRITE_BASE + 137
-SPRITE_BOSS_L_1               = SPRITE_BASE + 138
-SPRITE_BOSS_L_2               = SPRITE_BASE + 139
+SPRITE_BOSS_FOOT_R            = SPRITE_BASE + 136
+SPRITE_BOSS_FOOT_L            = SPRITE_BASE + 137
+SPRITE_BOSS_ARM_R             = SPRITE_BASE + 138
+SPRITE_BOSS_ARM_L             = SPRITE_BASE + 139
+SPRITE_BOSS_TORSO             = SPRITE_BASE + 140
+SPRITE_BOSS_HEAD              = SPRITE_BASE + 141
 
 ;offset from calculated char pos to true sprite pos
 SPRITE_CENTER_OFFSET_X  = 8
@@ -794,12 +796,18 @@ ShowStory
           lda #32
           ldy #1
           jsr ClearScreen
+          jsr ResetObjects
           
           ldy CHAPTER
           lda CHAPTER_PAGES_LO,y
           sta ZEROPAGE_POINTER_1
           lda CHAPTER_PAGES_HI,y
           sta ZEROPAGE_POINTER_1 + 1
+          
+          lda #0
+          sta VIC_SPRITE_ENABLE
+          sta VIC_SPRITE_X_EXTEND
+          sta SPRITE_POS_X_EXTEND
           
           lda #1
           sta PARAM1
@@ -886,8 +894,20 @@ ShowStory
 GameLoop  
           ;lda #0
           ;sta 53280
+          
+          ;lda NUMBER_ENEMIES_ALIVE
+          ;lda NUMBER_SPAWN_SPOTS_ALIVE
+          ;lda #0
+          ;sta VIC_BORDER_COLOR
+
+          
+          ;lda NUMBER_SPAWNS_ALIVE
+          ;sta VIC_BACKGROUND_COLOR
 
           jsr WaitFrame
+          
+          ;lda #1
+          ;sta VIC_BORDER_COLOR
 
           JSR $FFE4 ;GETIN
           BEQ .NOCHEAT
@@ -1183,6 +1203,8 @@ GameFlowControl
           bne .NotDoneYet
           lda NUMBER_SPAWN_SPOTS_ALIVE
           bne .NotDoneYet
+          lda NUMBER_SPAWNS_ALIVE
+          bne .NotDoneYet
 
           inc LEVEL_DONE_DELAY
           lda LEVEL_DONE_DELAY
@@ -1238,19 +1260,22 @@ ProcessSpawnSpots
           rts
 
 .TryToSpawn
-          lda #128
-          sta SPAWN_SPOT_DELAY,x
+          stx PARAM4
           
           lda NUMBER_ENEMIES_ALIVE
+          clc
+          adc NUMBER_SPAWNS_ALIVE
           cmp #6
-          bpl .DoNotSpawn
+          bcs .DoNotSpawn
           
           ;only spawn randomly
           jsr GenerateRandomNumber
           cmp #4
           bpl .DoNotSpawn
-          
-          stx PARAM4
+
+          lda #128
+          sta SPAWN_SPOT_DELAY,x
+
           lda SPAWN_SPOT_TYPE,x
           sta PARAM5
           lda SPAWN_SPOT_X,x
@@ -1258,14 +1283,16 @@ ProcessSpawnSpots
           lda SPAWN_SPOT_Y,x
           sta PARAM2
           
-          ;spawn object
-          jsr FindEmptySpriteSlot
+          ;spawn object (starting with two, do not accidentally spawn in other player's spot)
+          ldx #2
+          jsr FindEmptySpriteSlotWithStartingX
           beq .DoNotSpawn
           
           ;x is sprite slot
           ;PARAM1 is X
           ;PARAM2 is Y
           ;PARAM3 is object type
+          inc NUMBER_SPAWNS_ALIVE
           stx PARAM7
           lda #TYPE_SPAWN
           sta PARAM3
@@ -1283,6 +1310,7 @@ ProcessSpawnSpots
           beq .RemoveSpawnSpot
           
 .DoNotSpawn          
+          ldx PARAM4
           jmp .NextSpawnSpot
           
           
@@ -1900,6 +1928,7 @@ PlayerControl
           
 .NotInvincible          
           ;check if the player collected an item
+          ldy #0
 .ItemLoop
           lda ITEM_ACTIVE,y
           cmp #ITEM_NONE
@@ -5320,9 +5349,9 @@ BehaviourSpider
           
           ;neither jumping nor falling
           jsr GenerateRandomNumber
-          and #$0f
-          cmp #02
-          bpl .IsFalling
+          and #$3f
+          cmp #01
+          bcs .IsFalling
           
           ;random jump
           jmp .Jumping
@@ -5330,7 +5359,9 @@ BehaviourSpider
 .IsFalling          
 .NoFallHandling
 
-          lda #3
+          lda SPRITE_ANNOYED,x
+          clc
+          adc #2
           sta PARAM6
 .MoveStep
           dec PARAM6
@@ -6179,7 +6210,7 @@ BehaviourSlime
           sta SPRITE_ANIM_DELAY,x
           sta SPRITE_ANIM_POS,x
           
-          
+           
           lda SPRITE_DIRECTION,x
           beq .LookingRight
           lda #SPRITE_SLIME_L_1
@@ -6505,6 +6536,7 @@ BehaviourSpawn
           rts
           
 .SpawnNow
+          dec NUMBER_SPAWNS_ALIVE
           lda SPRITE_ANNOYED,x
           sta PARAM3
           lda SPRITE_CHAR_POS_X,x
@@ -6623,9 +6655,9 @@ BOSS_MOVE_SPEED = 1
           and #$03
           bne .NoAnimUpdate
           
-          lda SPRITE_POINTER_BASE,x
-          eor #$01
-          sta SPRITE_POINTER_BASE,x
+          ;lda SPRITE_POINTER_BASE,x
+          ;eor #$01
+          ;sta SPRITE_POINTER_BASE,x
           
 .NoAnimUpdate     
           lda SPRITE_STATE,x
@@ -6912,7 +6944,7 @@ BOSS_MOVE_SPEED = 1
           ;turning now
           lda #1
           sta SPRITE_DIRECTION,x
-          lda #SPRITE_BOSS_L_1
+          lda #SPRITE_BOSS_FOOT_L
           sta SPRITE_POINTER_BASE,x
           jmp .CheckYNow
           
@@ -6936,7 +6968,7 @@ BOSS_MOVE_SPEED = 1
 .TurnRNow          
           lda #0
           sta SPRITE_DIRECTION,x
-          lda #SPRITE_BOSS_R_1
+          lda #SPRITE_BOSS_FOOT_R
           sta SPRITE_POINTER_BASE,x
           jmp .CheckYNow
           
@@ -7465,15 +7497,15 @@ DisplayGetReady
 
 
 ;------------------------------------------------------------
-;BuildScreen
-;creates a screen from level data
+;ResetObjects
+;resets all objects/spawn spots
 ;------------------------------------------------------------
-!zone BuildScreen
-BuildScreen
-          ;reset all objects
+!zone ResetObjects
+ResetObjects
           ldx #0
           lda #0
           sta NUMBER_SPAWN_SPOTS_ALIVE
+          sta NUMBER_SPAWNS_ALIVE
 .ClearObjectLoop
           sta SPRITE_ACTIVE,x
           sta SPRITE_FALLING,x
@@ -7486,6 +7518,17 @@ BuildScreen
           inx
           cpx #8
           bne .ClearObjectLoop
+          rts
+
+
+;------------------------------------------------------------
+;BuildScreen
+;creates a screen from level data
+;------------------------------------------------------------
+!zone BuildScreen
+BuildScreen
+          ;reset all objects
+          jsr ResetObjects
           
           ;clear screen
           lda #32
@@ -7747,6 +7790,9 @@ LevelObject
           cmp #GT_SINGLE_PLAYER_DEAN
           beq .DoNotSpawnObject
           
+          lda PLAYER_LIVES + 1
+          beq .DoNotSpawnObject
+          
           ;make sure Sam starts in slot 1
           ldx #1
           jsr FindEmptySpriteSlotWithStartingX
@@ -7760,8 +7806,12 @@ LevelObject
           cmp #TYPE_PLAYER_DEAN
           bne .NoProblemDean
 
+          ;spawn Dean?
           lda GAME_MODE
           cmp #GT_SINGLE_PLAYER_SAM
+          beq .DoNotSpawnObject
+
+          lda PLAYER_LIVES
           beq .DoNotSpawnObject
 
 .NoProblemDean
@@ -9502,7 +9552,7 @@ TYPE_START_SPRITE
           !byte SPRITE_DRIVERS
           !byte SPRITE_DEBRIS_1
           !byte SPRITE_SPAWN_1
-          !byte SPRITE_BOSS_R_1
+          !byte SPRITE_BOSS_FOOT_L
           
 TYPE_START_COLOR
           !byte 0
@@ -9872,6 +9922,8 @@ PATH_8_DY
 NUMBER_ENEMIES_ALIVE
           !byte 0
 NUMBER_SPAWN_SPOTS_ALIVE
+          !byte 0
+NUMBER_SPAWNS_ALIVE
           !byte 0
           
 LEVEL_DONE_DELAY
