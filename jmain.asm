@@ -167,58 +167,21 @@ ITEM_COUNT              = 8
           ;set sprite flags
           lda #0
           sta VIC_SPRITE_X_EXTEND
-
-          ;init sprite 1 pos
-          lda #5
-          sta PARAM1
-          lda #4
-          sta PARAM2
-          ldx #0
-
-          jsr CalcSpritePosFromCharPos
-
-          ;set sprite image
-          lda #SPRITE_PLAYER
-          sta SPRITE_POINTER_BASE
-
-          ;enable sprite 1
-          lda #1
           sta VIC_SPRITE_ENABLE
 
           ;setup level
           lda #0
           sta LEVEL_NR
           jsr BuildScreen
-          
-          ;copy level data to back buffer
-          ldx #$00
-.ClearLoop          
-          lda SCREEN_CHAR,x
-          sta SCREEN_BACK_CHAR,x
-          lda SCREEN_CHAR + 230,x
-          sta SCREEN_BACK_CHAR + 230,x
-          lda SCREEN_CHAR + 460,x
-          sta SCREEN_BACK_CHAR + 460,x
-          lda SCREEN_CHAR + 690,x
-          sta SCREEN_BACK_CHAR + 690,x
-          inx
-          cpx #230
-          bne .ClearLoop
 
-          ldx #$00
-.ColorLoop          
-          lda SCREEN_COLOR,x
-          sta SCREEN_BACK_COLOR,x
-          lda SCREEN_COLOR + 230,x
-          sta SCREEN_BACK_COLOR + 230,x
-          lda SCREEN_COLOR + 460,x
-          sta SCREEN_BACK_COLOR + 460,x
-          lda SCREEN_COLOR + 690,x
-          sta SCREEN_BACK_COLOR + 690,x
-          inx
-          cpx #230
-          bne .ColorLoop
+          jsr CopyLevelToBackBuffer          
 
+          lda #48
+          clc
+          adc NUMBER_ENEMIES_ALIVE
+          sta SCREEN_CHAR
+          lda #1
+          sta SCREEN_COLOR
           
 
 ;------------------------------------------------------------
@@ -228,6 +191,7 @@ ITEM_COUNT              = 8
 GameLoop  
           jsr WaitFrame
           
+          jsr GameFlowControl
           jsr DeadControl
 
           jsr ObjectControl
@@ -235,6 +199,47 @@ GameLoop
           
           jmp GameLoop          
           
+
+;------------------------------------------------------------
+;controls the game flow
+;------------------------------------------------------------
+!zone GameFlowControl
+GameFlowControl
+          inc DELAYED_GENERIC_COUNTER
+          lda DELAYED_GENERIC_COUNTER
+          cmp #8
+          bne .NoTimedActionYet
+          lda #0
+          sta DELAYED_GENERIC_COUNTER
+
+          ;level done delay
+          lda NUMBER_ENEMIES_ALIVE
+          bne .NotDoneYet
+
+          inc LEVEL_DONE_DELAY
+          lda LEVEL_DONE_DELAY
+          cmp #20
+          beq .GoToNextLevel
+          inc VIC_BORDER_COLOR
+          
+.NotDoneYet        
+
+          
+          
+.NoTimedActionYet          
+          rts
+
+
+.GoToNextLevel
+          lda #0
+          sta VIC_SPRITE_ENABLE
+          
+          inc LEVEL_NR
+          jsr BuildScreen
+          
+          jsr CopyLevelToBackBuffer
+          
+          rts
 
 ;------------------------------------------------------------
 ;DeadControl   (ingame behaviour when player died)
@@ -798,6 +803,14 @@ FireShot
           
           
 .EnemyKilled          
+          ldy SPRITE_ACTIVE,x
+          lda IS_TYPE_ENEMY,y
+          beq .NoEnemy
+          
+          dec NUMBER_ENEMIES_ALIVE
+          dec SCREEN_CHAR
+          
+.NoEnemy          
           jsr RemoveObject
           
           jsr SpawnItem
@@ -1462,6 +1475,44 @@ CalcSpritePosFromCharPos
           sta SPRITE_CHAR_POS_Y_DELTA,x
           rts
 
+
+;------------------------------------------------------------
+;copies the screen data to the back buffer area
+;------------------------------------------------------------
+!zone CopyLevelToBackBuffer
+CopyLevelToBackBuffer
+
+          ldx #$00
+.ClearLoop          
+          lda SCREEN_CHAR,x
+          sta SCREEN_BACK_CHAR,x
+          lda SCREEN_CHAR + 230,x
+          sta SCREEN_BACK_CHAR + 230,x
+          lda SCREEN_CHAR + 460,x
+          sta SCREEN_BACK_CHAR + 460,x
+          lda SCREEN_CHAR + 690,x
+          sta SCREEN_BACK_CHAR + 690,x
+          inx
+          cpx #230
+          bne .ClearLoop
+
+          ldx #$00
+.ColorLoop          
+          lda SCREEN_COLOR,x
+          sta SCREEN_BACK_COLOR,x
+          lda SCREEN_COLOR + 230,x
+          sta SCREEN_BACK_COLOR + 230,x
+          lda SCREEN_COLOR + 460,x
+          sta SCREEN_BACK_COLOR + 460,x
+          lda SCREEN_COLOR + 690,x
+          sta SCREEN_BACK_COLOR + 690,x
+          inx
+          cpx #230
+          bne .ColorLoop
+          
+          rts
+
+
 ;------------------------------------------------------------
 ;BuildScreen
 ;creates a screen from level data
@@ -1469,19 +1520,36 @@ CalcSpritePosFromCharPos
 !zone BuildScreen
 BuildScreen
           lda #0
+          sta NUMBER_ENEMIES_ALIVE
+          sta LEVEL_DONE_DELAY
+          
+          ;reset all objects
+          ldx #0
+          lda #0
+.ClearObjectLoop
+          sta SPRITE_ACTIVE,x
+          inx
+          cpx #8
+          bne .ClearObjectLoop
+          
+          ;clear screen
+          lda #0
           ldy #6
           jsr ClearPlayScreen
 
           ;get pointer to real level data from table
-          ldx LEVEL_NR
+          lda LEVEL_NR
+          asl
+          tax
           lda SCREEN_DATA_TABLE,x
           sta ZEROPAGE_POINTER_1
           lda SCREEN_DATA_TABLE + 1,x
           sta ZEROPAGE_POINTER_1 + 1
+          beq .NoMoreLevels
           
           jsr .BuildLevel
 
-          ;get pointer to real level data from table
+          ;draw level border
           lda #<LEVEL_BORDER_DATA
           sta ZEROPAGE_POINTER_1
           lda #>LEVEL_BORDER_DATA
@@ -1489,6 +1557,12 @@ BuildScreen
           
           jsr .BuildLevel
           rts
+          
+.NoMoreLevels
+          ;loop from first screen
+          lda #0
+          sta LEVEL_NR
+          jmp BuildScreen
           
 .BuildLevel
           ;work through data
@@ -1691,6 +1765,15 @@ BuildScreen
           ;5 HP per default
           lda #5
           sta SPRITE_HP,x
+          
+          ;adjust enemy counter
+          ldx PARAM3
+          lda IS_TYPE_ENEMY,x
+          beq .NoEnemy
+          
+          inc NUMBER_ENEMIES_ALIVE
+          
+.NoEnemy
           
 .NoFreeSlot                    
           jmp .NextLevelData
@@ -1948,6 +2031,7 @@ CopySprites
 ;------------------------------------------------------------
 SCREEN_DATA_TABLE
           !word LEVEL_1
+          !word LEVEL_2
           !word 0
           
           
@@ -1969,6 +2053,19 @@ LEVEL_1
           !byte LD_OBJECT,10,18,TYPE_ENEMY_UD
           !byte LD_END
 
+LEVEL_2
+          !byte LD_LINE_H,5,5,10,96,13
+          !byte LD_LINE_H,1,21,38,96,13
+          !byte LD_LINE_H,7,7,3,96,13
+          !byte LD_LINE_H,9,9,3,96,13
+          !byte LD_LINE_H,11,11,3,96,13
+          !byte LD_LINE_H,13,13,3,96,13
+          !byte LD_LINE_H,15,15,3,96,13
+          !byte LD_LINE_H,17,17,3,96,13
+          !byte LD_LINE_H,19,19,3,96,13
+          !byte LD_OBJECT,19,20,TYPE_PLAYER
+          !byte LD_OBJECT,4,5,TYPE_ENEMY_LR
+          !byte LD_END
 
 LEVEL_BORDER_DATA
           !byte LD_LINE_H,0,0,40,128,9
@@ -2038,10 +2135,17 @@ ENEMY_BEHAVIOUR_TABLE_HI
           !byte >BehaviourDumbEnemyUD
           
 IS_TYPE_ENEMY
-          !byte 0     ;dummy entry
+          !byte 0     ;dummy entry for inactive object
           !byte 0     ;player
           !byte 1     ;enemy_lr
           !byte 1     ;enemy_ud
+          
+NUMBER_ENEMIES_ALIVE
+          !byte 0
+LEVEL_DONE_DELAY
+          !byte 0
+DELAYED_GENERIC_COUNTER
+          !byte 0
           
 ITEM_CHAR_UL
           !byte 4,8
