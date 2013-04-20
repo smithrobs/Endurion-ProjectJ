@@ -48,8 +48,8 @@ CIA_PRA                 = $dd00
 
 PROCESSOR_PORT          = $01
 
-;START_LEVEL             = 0
-START_LEVEL             = 69
+START_LEVEL             = 0
+;START_LEVEL             = 70
 
 MUSIC_IN_GAME_TUNE		    = $00
 MUSIC_TITLE_TUNE			     = $01
@@ -914,12 +914,14 @@ ShowChapterEnd
           sta VIC_SPRITE_ENABLE
           sta VIC_SPRITE_X_EXTEND
           sta SPRITE_POS_X_EXTEND
+          sta MOVE_STONES
           
           lda #1
           sta PARAM1
           lda #1
           sta PARAM2
           jsr DisplayText
+          
           jmp StoryLoop
 
 !zone ShowChapter
@@ -985,10 +987,118 @@ ShowChapter
           
           lda #0
           sta BUTTON_RELEASED
+          sta MOVE_STONE_POS_BACK
+          sta MOVE_STONE_POS_FRONT
+          lda #1
+          sta MOVE_STONES
           
 StoryLoop          
           jsr WaitFrame
+          
+STONE_BACK_DISTANCE = 20
+STONE_FRONT_DISTANCE = 24
+
+          lda MOVE_STONES
+          bne +
+          jmp .NoStones
++          
+          ;background
+          ldy #19
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          sta ZEROPAGE_POINTER_2
+          lda SCREEN_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+          clc
+          adc #( ( SCREEN_COLOR - SCREEN_CHAR ) >> 8 )
+          sta ZEROPAGE_POINTER_2 + 1
+          
+          ldy MOVE_STONE_POS_BACK
+-          
+          lda #32
+          sta (ZEROPAGE_POINTER_1),y
+          tya
+          clc
+          adc #STONE_BACK_DISTANCE
+          tay
+          cpy #39
+          bcc -
+          
+          lda MOVE_STONE_POS_BACK
+          clc
+          adc #1
+-          
+          cmp #STONE_BACK_DISTANCE
+          bcc +
+          sec
+          sbc #STONE_BACK_DISTANCE
+          jmp -
+          
++          
+          sta MOVE_STONE_POS_BACK
+          
+          ldy MOVE_STONE_POS_BACK
+-          
+          lda #149
+          sta (ZEROPAGE_POINTER_1),y
+          lda #8
+          sta (ZEROPAGE_POINTER_2),y
+          tya
+          clc
+          adc #STONE_BACK_DISTANCE
+          tay
+          cpy #39
+          bcc -
+
+          ;foreground
+          ldy #22
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          sta ZEROPAGE_POINTER_2
+          lda SCREEN_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+          clc
+          adc #( ( SCREEN_COLOR - SCREEN_CHAR ) >> 8 )
+          sta ZEROPAGE_POINTER_2 + 1
+          
+          ldy MOVE_STONE_POS_FRONT
+-          
+          lda #32
+          sta (ZEROPAGE_POINTER_1),y
+          tya
+          clc
+          adc #STONE_FRONT_DISTANCE
+          tay
+          cpy #39
+          bcc -
+          
+          lda MOVE_STONE_POS_FRONT
+          clc
+          adc #2
+-          
+          cmp #STONE_FRONT_DISTANCE
+          bcc +
+          sec
+          sbc #STONE_FRONT_DISTANCE
+          jmp -
++          
+          sta MOVE_STONE_POS_FRONT
+          
+          ldy MOVE_STONE_POS_FRONT
+-          
+          lda #148
+          sta (ZEROPAGE_POINTER_1),y
+          lda #9
+          sta (ZEROPAGE_POINTER_2),y
+          tya
+          clc
+          adc #STONE_FRONT_DISTANCE
+          tay
+          cpy #39
+          bcc -
+
          
+.NoStones         
           jsr ObjectControl
           
           lda #$10
@@ -997,8 +1107,10 @@ StoryLoop
           
           ;button pushed
           lda BUTTON_RELEASED
-          beq StoryLoop
+          bne +
+          jmp StoryLoop
           
++          
           lda #0
           sta VIC_SPRITE_ENABLE
           lda #11
@@ -1513,6 +1625,14 @@ GoToNextLevel
           jmp .NoStory
         
 .ShowStory        
+          ;switch to charset 1
+          lda #12
+          sta VIC_CHARSET_MULTICOLOR_1
+          lda #8
+          sta VIC_CHARSET_MULTICOLOR_2
+          lda #$3e
+          sta VIC_MEMORY_CONTROL
+
           jsr ShowChapterEnd
           inc CHAPTER
           jsr ShowChapter
@@ -1591,6 +1711,7 @@ HandleFinalBossIntro
           sta PARAM3
           jsr FindEmptySpriteSlot
           jsr SpawnObject
+          stx PARAM10
 
           ;left arm
           lda #17
@@ -1603,7 +1724,9 @@ HandleFinalBossIntro
           jsr SpawnObject
           lda #TYPE_BOSS_PART
           sta SPRITE_ACTIVE,x
-          lda #1
+          lda PARAM10
+          sta SPRITE_VALUE,x
+          lda #2
           sta VIC_SPRITE_COLOR,x
 
           ;right arm
@@ -1617,7 +1740,9 @@ HandleFinalBossIntro
           jsr SpawnObject
           lda #TYPE_BOSS_PART
           sta SPRITE_ACTIVE,x
-          lda #1
+          lda PARAM10
+          sta SPRITE_VALUE,x
+          lda #2
           sta VIC_SPRITE_COLOR,x
 
           ;torso
@@ -1631,10 +1756,12 @@ HandleFinalBossIntro
           jsr SpawnObject
           lda #TYPE_BOSS_PART
           sta SPRITE_ACTIVE,x
-          lda #1
+          jsr MoveSpriteUp
+          jsr MoveSpriteUp
+          lda PARAM10
+          sta SPRITE_VALUE,x
+          lda #2
           sta VIC_SPRITE_COLOR,x
-          jsr MoveSpriteUp
-          jsr MoveSpriteUp
 
           ;left foot
           lda #18
@@ -1647,7 +1774,9 @@ HandleFinalBossIntro
           jsr SpawnObject
           lda #TYPE_BOSS_PART
           sta SPRITE_ACTIVE,x
-          lda #1
+          lda PARAM10
+          sta SPRITE_VALUE,x
+          lda #2
           sta VIC_SPRITE_COLOR,x
 
           ;right foot
@@ -1661,7 +1790,9 @@ HandleFinalBossIntro
           jsr SpawnObject
           lda #TYPE_BOSS_PART
           sta SPRITE_ACTIVE,x
-          lda #1
+          lda PARAM10
+          sta SPRITE_VALUE,x
+          lda #2
           sta VIC_SPRITE_COLOR,x
           
           jmp .Flash
@@ -4714,193 +4845,10 @@ ObjectMoveDownBlockingNoPlatform
           rts
           
 
-;------------------------------------------------------------
-;move object down
-;x = object index
-;------------------------------------------------------------
-!zone ObjectMoveDown
-ObjectMoveDown
-          
-          inc SPRITE_CHAR_POS_Y_DELTA,x
-          
-          lda SPRITE_CHAR_POS_Y_DELTA,x
-          cmp #8
-          bne .NoCharStep
-          
-          lda #0
-          sta SPRITE_CHAR_POS_Y_DELTA,x
-          inc SPRITE_CHAR_POS_Y,x
-          
-.NoCharStep          
-          jsr MoveSpriteDown
-          rts
 
-
-;------------------------------------------------------------
-;Enemy Behaviour
-;------------------------------------------------------------
-!zone ObjectControl
-ObjectControl
-          ldx #0
-          
-.ObjectLoop          
-          ;object does not move when held
-          lda SPRITE_HELD
-          sta PARAM1
-          dec PARAM1
-          cpx PARAM1
-          beq .NextObject
-          
-          ;does object exist?
-          ldy SPRITE_ACTIVE,x
-          beq .NextObject
-          
-          lda DELAYED_GENERIC_COUNTER
-          and #$03
-          bne +
-          
-          ;check if we're in water
-          ldy SPRITE_CHAR_POS_Y,x
-          lda SCREEN_LINE_OFFSET_TABLE_LO,y
-          sta ZEROPAGE_POINTER_1
-          lda SCREEN_BACK_LINE_OFFSET_TABLE_HI,y
-          sta ZEROPAGE_POINTER_1 + 1
-          lda SPRITE_CHAR_POS_X,x
-          tay
-          lda (ZEROPAGE_POINTER_1),y
-          cmp #111
-          beq .NextObject
-          cmp #143
-          beq .NextObject
-          
-+          
-          ldy SPRITE_ACTIVE,x
-          
-          ;enemy is active
-          dey
-          lda ENEMY_BEHAVIOUR_TABLE_LO,y
-          sta ZEROPAGE_POINTER_1
-          lda ENEMY_BEHAVIOUR_TABLE_HI,y
-          sta ZEROPAGE_POINTER_1 + 1
-          
-          ;set up return address for rts
-          lda #>( .NextObject - 1 )
-          pha 
-          lda #<( .NextObject - 1 )
-          pha
-          
-          jmp (ZEROPAGE_POINTER_1)
-          
-.NextObject          
-          inx
-          cpx #8
-          bne .ObjectLoop
-          rts
-
-!zone BehaviourNone
-BehaviourNone
-          rts
-
-
-!zone HitBehaviourBossHelper
-HitBehaviourBossHelper
-          rts
-
-
-;------------------------------------------------------------
-;handles simple hitback
-;------------------------------------------------------------
-!zone HandleHitBack
-HandleHitBack
-          lda SPRITE_HITBACK,x
-          beq .NoHitBack
-
-          dec SPRITE_HITBACK,x
-          lda SPRITE_HITBACK_DIRECTION,x
-          beq .HitBackRight
-          
-          ;move left
-          jsr ObjectMoveLeftBlocking
-          lda #1
-          rts
-          
-.HitBackRight          
-          jsr ObjectMoveRightBlocking
-          lda #1
-          rts
-          
-.NoHitBack
-          lda #0
-          rts
           
 
 
-;------------------------------------------------------------
-;simply move diagonal
-;------------------------------------------------------------
-!zone BehaviourBatDiagonal
-BehaviourBatDiagonal
-          jsr HandleHitBack
-          beq .NoHitBack
-          rts
-          
-.NoHitBack          
-          lda DELAYED_GENERIC_COUNTER
-          and #$03
-          bne .NoAnimUpdate
-          
-          inc SPRITE_ANIM_POS,x
-          lda SPRITE_ANIM_POS,x
-          and #$03
-          sta SPRITE_ANIM_POS,x
-          
-          tay
-          lda BAT_ANIMATION,y
-          sta SPRITE_POINTER_BASE,x
-          
-.NoAnimUpdate          
-          lda SPRITE_DIRECTION,x
-          beq .MoveRight
-          
-          ;move left
-          jsr ObjectMoveLeftBlocking
-          beq .ToggleDirection
-          jmp .MoveY
-          
-.MoveRight
-          jsr ObjectMoveRightBlocking
-          beq .ToggleDirection
-          jmp .MoveY
-          
-.ToggleDirection
-          lda SPRITE_DIRECTION,x
-          eor #1
-          sta SPRITE_DIRECTION,x
-          
-.MoveY
-          lda SPRITE_DIRECTION_Y,x
-          beq .MoveDown
-          
-          ;move up
-          jsr ObjectMoveUpBlocking
-          beq .ToggleDirectionY
-          rts
-          
-.MoveDown
-          jsr ObjectMoveDownBlocking
-          beq .ToggleDirectionY
-          rts
-          
-.ToggleDirectionY
-          lda SPRITE_DIRECTION_Y,x
-          eor #1
-          sta SPRITE_DIRECTION_Y,x
-          rts
- 
- 
-          
-
- 
 ;place the data at a valid bitmap position, this avoids copying the data        
 * = $2000        
 ;TITLE_LOGO_BMP_DATA
@@ -5151,6 +5099,196 @@ SCREEN_BACK_LINE_OFFSET_TABLE_HI
 * = $3000
 MUSIC_PLAYER
 !binary "music.bin",,2
+
+
+;------------------------------------------------------------
+;move object down
+;x = object index
+;------------------------------------------------------------
+!zone ObjectMoveDown
+ObjectMoveDown
+          
+          inc SPRITE_CHAR_POS_Y_DELTA,x
+          
+          lda SPRITE_CHAR_POS_Y_DELTA,x
+          cmp #8
+          bne .NoCharStep
+          
+          lda #0
+          sta SPRITE_CHAR_POS_Y_DELTA,x
+          inc SPRITE_CHAR_POS_Y,x
+          
+.NoCharStep          
+          jsr MoveSpriteDown
+          rts
+
+
+
+;------------------------------------------------------------
+;Enemy Behaviour
+;------------------------------------------------------------
+!zone ObjectControl
+ObjectControl
+          ldx #0
+          stx CURRENT_INDEX
+.ObjectLoop          
+          ;object does not move when held
+          lda SPRITE_HELD
+          sta PARAM1
+          dec PARAM1
+          cpx PARAM1
+          beq .NextObject
+          
+          ;does object exist?
+          ldy SPRITE_ACTIVE,x
+          beq .NextObject
+          
+          lda DELAYED_GENERIC_COUNTER
+          and #$03
+          bne +
+          
+          ;check if we're in water
+          ldy SPRITE_CHAR_POS_Y,x
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          lda SCREEN_BACK_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+          lda SPRITE_CHAR_POS_X,x
+          tay
+          lda (ZEROPAGE_POINTER_1),y
+          cmp #111
+          beq .NextObject
+          cmp #143
+          beq .NextObject
+          
++          
+          ldy SPRITE_ACTIVE,x
+          
+          ;enemy is active
+          dey
+          lda ENEMY_BEHAVIOUR_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          lda ENEMY_BEHAVIOUR_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+          
+          ;set up return address for rts
+          lda #>( .NextObject - 1 )
+          pha 
+          lda #<( .NextObject - 1 )
+          pha
+          
+          jmp (ZEROPAGE_POINTER_1)
+          
+.NextObject  
+          inc CURRENT_INDEX
+          ldx CURRENT_INDEX
+          cpx #8
+          bne .ObjectLoop
+          rts
+
+!zone BehaviourNone
+BehaviourNone
+          rts
+
+
+!zone HitBehaviourBossHelper
+HitBehaviourBossHelper
+          rts
+
+
+;------------------------------------------------------------
+;handles simple hitback
+;------------------------------------------------------------
+!zone HandleHitBack
+HandleHitBack
+          lda SPRITE_HITBACK,x
+          beq .NoHitBack
+
+          dec SPRITE_HITBACK,x
+          lda SPRITE_HITBACK_DIRECTION,x
+          beq .HitBackRight
+          
+          ;move left
+          jsr ObjectMoveLeftBlocking
+          lda #1
+          rts
+          
+.HitBackRight          
+          jsr ObjectMoveRightBlocking
+          lda #1
+          rts
+          
+.NoHitBack
+          lda #0
+          rts
+
+
+;------------------------------------------------------------
+;simply move diagonal
+;------------------------------------------------------------
+!zone BehaviourBatDiagonal
+BehaviourBatDiagonal
+          jsr HandleHitBack
+          beq .NoHitBack
+          rts
+          
+.NoHitBack          
+          lda DELAYED_GENERIC_COUNTER
+          and #$03
+          bne .NoAnimUpdate
+          
+          inc SPRITE_ANIM_POS,x
+          lda SPRITE_ANIM_POS,x
+          and #$03
+          sta SPRITE_ANIM_POS,x
+          
+          tay
+          lda BAT_ANIMATION,y
+          sta SPRITE_POINTER_BASE,x
+          
+.NoAnimUpdate          
+          lda SPRITE_DIRECTION,x
+          beq .MoveRight
+          
+          ;move left
+          jsr ObjectMoveLeftBlocking
+          beq .ToggleDirection
+          jmp .MoveY
+          
+.MoveRight
+          jsr ObjectMoveRightBlocking
+          beq .ToggleDirection
+          jmp .MoveY
+          
+.ToggleDirection
+          lda SPRITE_DIRECTION,x
+          eor #1
+          sta SPRITE_DIRECTION,x
+          
+.MoveY
+          lda SPRITE_DIRECTION_Y,x
+          beq .MoveDown
+          
+          ;move up
+          jsr ObjectMoveUpBlocking
+          beq .ToggleDirectionY
+          rts
+          
+.MoveDown
+          jsr ObjectMoveDownBlocking
+          beq .ToggleDirectionY
+          rts
+          
+.ToggleDirectionY
+          lda SPRITE_DIRECTION_Y,x
+          eor #1
+          sta SPRITE_DIRECTION_Y,x
+          rts
+ 
+ 
+          
+
+ 
 
 
 ;------------------------------------------------------------
@@ -9593,10 +9731,92 @@ BOSS_MOVE_SPEED = 1
 
 ;------------------------------------------------------------
 ;boss #7
+;state = 0 -> random movements
 ;------------------------------------------------------------
 !zone BehaviourBoss7
 BehaviourBoss7
 BOSS_MOVE_SPEED = 1
+          lda SPRITE_STATE,x
+          beq .RandomMovements
+
+
+
+.RandomMovements
+          lda SPRITE_MOVE_POS,x
+          bne .DoMove
+          
+          ;find new random dir
+          
+          lda #25
+          sta SPRITE_MOVE_POS,x
+          
+          jsr GenerateRandomNumber
+          and #$01
+          sta SPRITE_DIRECTION,x
+          jsr GenerateRandomNumber
+          and #$01
+          sta SPRITE_DIRECTION_Y,x
+
+.DoMove
+          dec SPRITE_MOVE_POS,x
+          
+          lda SPRITE_DIRECTION,x
+          beq ++
+          jsr ObjectMoveLeftBlocking
+          beq .DoMoveY
+          
+          ;move other parts
+          lda #5
+          sta PARAM10
+-          
+          inx
+          jsr MoveSpriteLeft
+          dec PARAM10
+          bne -
+          
+          jmp .DoMoveY
+++          
+          jsr ObjectMoveRightBlocking        
+          beq .DoMoveY
+          
+          ;move other parts
+          lda #5
+          sta PARAM10
+-          
+          inx
+          jsr MoveSpriteRight
+          dec PARAM10
+          bne -
+          
+.DoMoveY
+          ldx CURRENT_INDEX
+          lda SPRITE_DIRECTION_Y,x
+          beq ++
+          jsr ObjectMoveUpBlocking        
+          beq .DoMoveDone
+          
+          ;move other parts
+          lda #5
+          sta PARAM10
+-          
+          inx
+          jsr MoveSpriteUp
+          dec PARAM10
+          bne -
+          jmp .DoMoveDone
+++          
+          jsr ObjectMoveDownBlocking
+          beq .DoMoveDone
+          
+          ;move other parts
+          lda #5
+          sta PARAM10
+-          
+          inx
+          jsr MoveSpriteDown
+          dec PARAM10
+          bne -
+.DoMoveDone          
           rts
 
 
@@ -12431,8 +12651,8 @@ TYPE_START_COLOR
           !byte 0     ;boss4
           !byte 1     ;boss5
           !byte 1     ;boss6
-          !byte 0     ;boss7
-          !byte 0     ;boss helper
+          !byte 2     ;boss7
+          !byte 2     ;boss helper
           
 TYPE_START_MULTICOLOR
           !byte 0     ;dummy
@@ -12545,8 +12765,8 @@ TYPE_ANNOYED_COLOR
           !byte 0     ;boss4
           !byte 1     ;boss5
           !byte 1     ;boss6
-          !byte 0     ;boss7
-          !byte 0     ;boss helper
+          !byte 2     ;boss7
+          !byte 2     ;boss helper
           
           
 ;enemy start direction, 2 bits per dir.
@@ -13112,6 +13332,15 @@ FINAL_INTRO_TIMER_DELAY
           !byte 0
 FINAL_INTRO_FLASH
           !byte 0
+MOVE_STONES
+          !byte 0
+MOVE_STONE_POS_BACK
+          !byte 0
+MOVE_STONE_POS_FRONT
+          !byte 0
+CURRENT_INDEX
+          !byte 0
+      
           
 !source "level_data.asm"
 
