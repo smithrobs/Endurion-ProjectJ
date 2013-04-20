@@ -45,7 +45,7 @@ CIA_PRA                 = $dd00
 
 PROCESSOR_PORT          = $01
 
-START_LEVEL             = 24
+START_LEVEL             = 22
 
 MUSIC_IN_GAME_TUNE		    = $00
 MUSIC_TITLE_TUNE			     = $01
@@ -330,6 +330,7 @@ TYPE_IMPALA_DEBRIS      = 25
 TYPE_SPAWN              = 26
 TYPE_BOSS               = 27
 TYPE_BOSS2              = 28
+TYPE_BOSS3              = 29
 
 OBJECT_HEIGHT           = 8 * 2
 
@@ -432,6 +433,32 @@ BEAM_TYPE_LIGHT2        = 3
           sta ZEROPAGE_POINTER_1 + 1
           
           jsr CopySprites
+          
+          
+          ;store water tile bytes
+          ldx #0
+          
+          lda $F800 + 111 * 8
+          sta PARAM1
+          lda $F800 + 111 * 8 + 1
+          sta PARAM2
+          
+-          
+          lda PARAM1
+          lsr
+          ror PARAM1
+          lda PARAM1
+          sta ANIM_TILE_BYTES,x
+
+          lda PARAM2
+          lsr
+          ror PARAM2
+          lda PARAM2
+          sta ANIM_TILE_BYTES + 8,x
+
+          inx
+          cpx #8
+          bne -
           
           ;restore ROMs
           ;lda PARAM1
@@ -859,13 +886,6 @@ ShowStory
 
           lda #44
           sta PARAM1
-          lda #TYPE_IMPALA_DRIVER
-          sta PARAM3
-          jsr FindEmptySpriteSlot
-          jsr SpawnObject
-
-          lda #44
-          sta PARAM1
           lda #TYPE_IMPALA_2
           sta PARAM3
           jsr FindEmptySpriteSlot
@@ -958,6 +978,21 @@ GameLoop
           jsr DisplayGetReady
 .NOCHEAT
 
+          ;animate water tile
+          lda DELAYED_GENERIC_COUNTER
+          and #$03
+          bne +
+          
+          inc ANIM_POS
+          lda ANIM_POS
+          and #$07
+          tay
+          
+          lda ANIM_TILE_BYTES,y
+          sta $F800 + 111 * 8
+          lda ANIM_TILE_BYTES + 8,y
+          sta $F800 + 111 * 8 + 1
++
           ;lda #1
           ;sta VIC_BORDER_COLOR
           lda LEVEL_START_DELAY
@@ -6459,6 +6494,14 @@ BehaviourEye
           ;can move again
           lda #0
           sta SPRITE_STATE,x
+          
+          ;random direction
+          jsr GenerateRandomNumber
+          and #$01
+          sta SPRITE_DIRECTION,x
+          jsr GenerateRandomNumber
+          and #$01
+          sta SPRITE_DIRECTION_Y,x
           rts
           
           
@@ -7643,6 +7686,188 @@ RestoreBeamDiagonal
           ldx PARAM6
           rts
  
+ 
+ 
+!zone BossFollowPlayerX
+BOSS3_MOVE_SPEED = 2
+.DoGhostMove
+          ;move X times
+          ldy SPRITE_MOVE_POS,x
+          sty PARAM4
+          beq +
+          
+          lda SPRITE_DIRECTION,x
+          beq .DoRight
+.MoveLoopL
+          jsr ObjectMoveLeftBlocking
+          dec PARAM4
+          bne .MoveLoopL
++          
+          rts
+          
+.DoRight
+.MoveLoopR
+          jsr ObjectMoveRightBlocking
+          dec PARAM4
+          bne .MoveLoopR
+          rts
+
+BossFollowPlayerX
+          inc SPRITE_ANIM_DELAY,x
+          lda SPRITE_ANIM_DELAY,x
+          cmp #10
+          beq .DoCheckMove
+          jmp .DoGhostMove
+
+.DoCheckMove
+          lda #0
+          sta SPRITE_ANIM_DELAY,x
+          
+          txa
+          and #$01
+          tay
+          lda SPRITE_ACTIVE,y
+          cmp #TYPE_PLAYER_DEAN
+          beq .FoundPlayer
+          cmp #TYPE_PLAYER_SAM
+          beq .FoundPlayer
+          
+          ;check other player
+          tya
+          eor #1
+          tay
+          lda SPRITE_ACTIVE,y
+          cmp #TYPE_PLAYER_DEAN
+          beq .FoundPlayer
+          cmp #TYPE_PLAYER_SAM
+          beq .FoundPlayer
+          
+          ;no player to hunt
+          rts
+          
+.FoundPlayer
+          ;player index in y
+          lda SPRITE_CHAR_POS_X,y
+          cmp SPRITE_CHAR_POS_X,x
+          bpl .MoveRight
+          
+          ;move left
+          lda SPRITE_DIRECTION,x
+          bne .AlreadyLookingLeft
+          lda SPRITE_MOVE_POS,x
+          beq .TurnLNow
+          dec SPRITE_MOVE_POS,x
+          bne .CheckXDone
+          
+.TurnLNow          
+          ;turning now
+          lda #1
+          sta SPRITE_DIRECTION,x
+          lda #SPRITE_BOSS_ARM_L
+          sta SPRITE_POINTER_BASE,x
+          jmp .CheckXDone
+          
+.AlreadyLookingLeft
+          lda SPRITE_MOVE_POS,x
+          cmp #BOSS3_MOVE_SPEED
+          beq .CheckXDone
+          inc SPRITE_MOVE_POS,x
+          jmp .CheckXDone
+          
+.MoveRight   
+          lda SPRITE_DIRECTION,x
+          beq .AlreadyLookingRight
+          
+          lda SPRITE_MOVE_POS,x
+          beq .TurnRNow
+          dec SPRITE_MOVE_POS,x
+          bne .CheckXDone
+          
+          ;turning now
+.TurnRNow          
+          lda #0
+          sta SPRITE_DIRECTION,x
+          lda #SPRITE_BOSS_ARM_R
+          sta SPRITE_POINTER_BASE,x
+          jmp .CheckXDone
+          
+.AlreadyLookingRight          
+          lda SPRITE_MOVE_POS,x
+          cmp #BOSS3_MOVE_SPEED
+          beq .CheckXDone
+          inc SPRITE_MOVE_POS,x
+          jmp .CheckXDone
+ 
+ 
+.CheckXDone
+          rts
+          
+;------------------------------------------------------------
+;boss 3
+;------------------------------------------------------------
+!zone BehaviourBoss3
+BehaviourBoss3
+BOSS_MOVE_SPEED = 1
+          lda SPRITE_HITBACK,x
+          beq .NoHitBack
+
+          dec SPRITE_HITBACK,x
+          
+          ldy SPRITE_HITBACK,x
+          lda BOSS_FLASH_TABLE,y
+          sta VIC_SPRITE_COLOR,x
+          
+          cpy #0
+          bne .NoHitBack
+          
+          ;make vulnerable again
+          ;lda SPRITE_STATE,x
+          ;cmp #128
+          ;bne .NoHitBack
+          
+          lda #0
+          sta SPRITE_STATE,x
+        
+.NoHitBack        
+          lda DELAYED_GENERIC_COUNTER
+          and #$01
+          beq +
+          
+          rts
+          
++          
+          ;y swing
+          inc SPRITE_MOVE_POS_Y,x
+          lda SPRITE_MOVE_POS_Y,x
+          and #15
+          sta SPRITE_MOVE_POS_Y,x
+          
+          ldy SPRITE_MOVE_POS_Y,x
+          lda PATH_DY,y
+          beq .NoYMoveNeeded
+          sta PARAM1
+          and #$80
+          beq .MoveDown
+          
+          ;move up
+          lda PARAM1
+          and #$7f
+          sta PARAM1
+.MoveUp   
+          jsr ObjectMoveUp
+          dec PARAM1
+          bne .MoveUp
+          
+          jmp BossFollowPlayerX
+          
+.MoveDown
+          jsr ObjectMoveDown
+          dec PARAM1
+          bne .MoveDown
+
+.NoYMoveNeeded
+          jmp BossFollowPlayerX
+          
 ;------------------------------------------------------------
 ;explosion
 ;------------------------------------------------------------
@@ -7755,14 +7980,6 @@ HitBehaviourHurt
 ;------------------------------------------------------------
 !zone HitBehaviourBoss
 HitBehaviourBoss
-          lda #8
-          sta SPRITE_HITBACK,x
-          
-          ;make invincible for a short while
-          lda SPRITE_STATE,x
-          ora #$80
-          sta SPRITE_STATE,x
-          
           ;boss switches tactic
           lda SPRITE_HP,x
           and #$01
@@ -7777,6 +7994,17 @@ HitBehaviourBoss
           sta SPRITE_MODE_POS,x
           sta SPRITE_MOVE_POS,x
           sta SPRITE_MOVE_POS_Y,x
+          
+          ;fall through
+
+HitBehaviourBoss3
+          lda #8
+          sta SPRITE_HITBACK,x
+          
+          ;make invincible for a short while
+          lda SPRITE_STATE,x
+          ora #$80
+          sta SPRITE_STATE,x
           rts
           
  
@@ -8139,6 +8367,10 @@ BuildScreen
           beq .SetCharSet1
           
           ;set charset 2
+          lda #10
+          sta VIC_CHARSET_MULTICOLOR_1
+          lda #7
+          sta VIC_CHARSET_MULTICOLOR_2
           lda #$30
 -          
           sta VIC_MEMORY_CONTROL
@@ -8148,6 +8380,10 @@ BuildScreen
           rts
           
 .SetCharSet1
+          lda #12
+          sta VIC_CHARSET_MULTICOLOR_1
+          lda #8
+          sta VIC_CHARSET_MULTICOLOR_2
           lda #$3e
           jmp -
           
@@ -10056,6 +10292,7 @@ ENEMY_BEHAVIOUR_TABLE_LO
           !byte <BehaviourSpawn
           !byte <BehaviourBoss
           !byte <BehaviourBoss2
+          !byte <BehaviourBoss3
           
 ENEMY_BEHAVIOUR_TABLE_HI
           !byte >PlayerControl
@@ -10086,6 +10323,7 @@ ENEMY_BEHAVIOUR_TABLE_HI
           !byte >BehaviourSpawn
           !byte >BehaviourBoss
           !byte >BehaviourBoss2
+          !byte >BehaviourBoss3
           
 ;behaviour for an enemy being hit          
 ENEMY_HIT_BEHAVIOUR_TABLE_LO          
@@ -10116,6 +10354,7 @@ ENEMY_HIT_BEHAVIOUR_TABLE_LO
           !byte <BehaviourNone        ;spawn
           !byte <HitBehaviourBoss     ;boss
           !byte <HitBehaviourBoss     ;boss
+          !byte <HitBehaviourBoss3    ;boss
           
           
 ENEMY_HIT_BEHAVIOUR_TABLE_HI
@@ -10146,6 +10385,7 @@ ENEMY_HIT_BEHAVIOUR_TABLE_HI
           !byte >BehaviourNone        ;spawn
           !byte >HitBehaviourBoss     ;boss
           !byte >HitBehaviourBoss     ;boss
+          !byte >HitBehaviourBoss3    ;boss
           
 IS_TYPE_ENEMY
           !byte 0     ;dummy entry for inactive object
@@ -10177,6 +10417,7 @@ IS_TYPE_ENEMY
           !byte 0     ;spawn
           !byte 1     ;boss
           !byte 1     ;boss2
+          !byte 1     ;boss3
           
 TYPE_START_SPRITE
           !byte 0     ;dummy entry for inactive object
@@ -10208,6 +10449,7 @@ TYPE_START_SPRITE
           !byte SPRITE_SPAWN_1
           !byte SPRITE_BOSS_FOOT_L
           !byte SPRITE_BOSS_FOOT_R
+          !byte SPRITE_BOSS_ARM_L
           
 TYPE_START_COLOR
           !byte 0
@@ -10231,14 +10473,15 @@ TYPE_START_COLOR
           !byte 10    ;frankenstein
           !byte 7     ;hand
           !byte 7     ;devil
-          !byte 0     ;impala 1
-          !byte 0     ;impala 2
-          !byte 0     ;impala 3
+          !byte 9     ;impala 1
+          !byte 9     ;impala 2
+          !byte 9     ;impala 3
           !byte 9     ;impala driver
           !byte 9     ;impala debris
           !byte 12    ;spawn
           !byte 0     ;boss
           !byte 0     ;boss2
+          !byte 0     ;boss3
           
 TYPE_START_MULTICOLOR
           !byte 0     ;dummy
@@ -10270,6 +10513,7 @@ TYPE_START_MULTICOLOR
           !byte 0     ;spawn
           !byte 0     ;boss
           !byte 0     ;boss2
+          !byte 0     ;boss3
           
 TYPE_START_HP
           !byte 0     ;dummy
@@ -10301,6 +10545,7 @@ TYPE_START_HP
           !byte 0     ;spawn
           !byte 10    ;boss
           !byte 10    ;boss2
+          !byte 10    ;boss3
           
 TYPE_ANNOYED_COLOR
           !byte 0     ;dummy
@@ -10332,6 +10577,7 @@ TYPE_ANNOYED_COLOR
           !byte 7     ;spawn
           !byte 0     ;boss
           !byte 0     ;boss2
+          !byte 0     ;boss3
           
           
 ;enemy start direction, 2 bits per dir.
@@ -10379,6 +10625,7 @@ TYPE_START_DIRECTION
           !byte 0             ;spawn
           !byte %00001010     ;boss
           !byte %00001010     ;boss2
+          !byte %00001010     ;boss3
           
 TYPE_START_STATE
           !byte 0             ;dummy
@@ -10410,6 +10657,7 @@ TYPE_START_STATE
           !byte 128           ;spawn
           !byte 0             ;boss
           !byte 0             ;boss2
+          !byte 0             ;boss3
           
 TYPE_START_DELTA_Y
           !byte 0     ;dummy
@@ -10441,6 +10689,7 @@ TYPE_START_DELTA_Y
           !byte 0     ;spawn
           !byte 0     ;boss
           !byte 0     ;boss2
+          !byte 0     ;boss3
           
 BAT_ANIMATION
           !byte SPRITE_BAT_1
@@ -10581,6 +10830,25 @@ PATH_8_DY
           !byte $81
           !byte 0
           
+PATH_DY
+          !byte 0
+          !byte 1
+          !byte 2
+          !byte 3
+          !byte 4
+          !byte 3
+          !byte 2
+          !byte 1
+
+          !byte 0
+          !byte $81
+          !byte $82
+          !byte $83
+          !byte $84
+          !byte $83
+          !byte $82
+          !byte $81
+
 NUMBER_ENEMIES_ALIVE
           !byte 0
 NUMBER_SPAWN_SPOTS_ALIVE
@@ -10768,6 +11036,12 @@ LEVEL_BORDER_DATA
           !byte LD_LINE_V_ALT,0,1,22,192,9
           !byte LD_LINE_V_ALT,39,1,22,192,9
           !byte LD_END
+          
+ANIM_TILE_BYTES
+          !byte 0,0,0,0,0,0,0,0
+          !byte 0,0,0,0,0,0,0,0
+ANIM_POS
+          !byte 0
           
 !source "level_data.asm"          
 
