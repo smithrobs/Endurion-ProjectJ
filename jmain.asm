@@ -49,7 +49,7 @@ CIA_PRA                 = $dd00
 PROCESSOR_PORT          = $01
 
 ;START_LEVEL             = 0
-START_LEVEL             = 59
+START_LEVEL             = 55
 
 MUSIC_IN_GAME_TUNE		    = $00
 MUSIC_TITLE_TUNE			     = $01
@@ -1458,6 +1458,12 @@ GameFlowControl
           
           
 .NoTimedActionYet          
+          lda DELAYED_GENERIC_COUNTER
+          and #$03
+          beq +
+ 
+          inc DELAYED_GENERIC_COUNTER_WO_WATER
++          
           rts
 
 
@@ -5569,7 +5575,14 @@ GHOST_MOVE_SPEED = 1
           rts
 
 .NoHitBack
-          lda DELAYED_GENERIC_COUNTER
+          ;inc SPRITE_MODE_POS
+          ;lda SPRITE_MODE_POS
+          ;and #$01
+          ;beq +
+          ;rts
+    
+;+    
+          lda DELAYED_GENERIC_COUNTER_WO_WATER
           and #$03
           bne .NoAnimUpdate
           
@@ -12178,6 +12191,8 @@ LEVEL_DONE_DELAY
 LEVEL_CONFIG
           !byte 0
 DELAYED_GENERIC_COUNTER
+          !byte 0
+DELAYED_GENERIC_COUNTER_WO_WATER
           !byte 0
           
 ITEM_CHAR_UL
