@@ -31,6 +31,7 @@ VIC_SPRITE_ENABLE       = $d015
 VIC_CONTROL             = $d016
 VIC_SPRITE_EXPAND_Y     = $d017
 VIC_MEMORY_CONTROL      = $d018
+VIC_SPRITE_PRIORITY     = $d01b
 VIC_SPRITE_MULTICOLOR   = $d01c
 VIC_SPRITE_EXPAND_X     = $d01d
 VIC_SPRITE_MULTICOLOR_1 = $d025
@@ -48,13 +49,17 @@ CIA_PRA                 = $dd00
 
 PROCESSOR_PORT          = $01
 
-START_LEVEL             = 0
-;START_LEVEL             = 71
+;START_LEVEL             = 0
+START_LEVEL             = 71
 
 MUSIC_IN_GAME_TUNE		    = $00
 MUSIC_TITLE_TUNE			     = $01
 MUSIC_GET_READY_GAME_OVER_TUNE  = $02 ;Also use this for Game Over!
-MUSIC_GAME_END_TUNE      = $03
+MUSIC_GAME_END_TUNE     = $03
+MUSIC_PLAYER_SHOOT      = $04
+MUSIC_PLAYER_DIE        = $05
+MUSIC_PICKUP            = $06
+MUSIC_ENEMY_DIE         = $07
 
 
 ;placeholder for various temp parameters
@@ -93,7 +98,7 @@ SCREEN_BACK_COLOR       = $BC00
 SPRITE_POINTER_BASE     = SCREEN_CHAR + 1016
 
 ;number of sprites divided by four
-NUMBER_OF_SPRITES_DIV_4       = 156 / 4
+NUMBER_OF_SPRITES_DIV_4       = 160 / 4
 
 ;sprite number constant
 SPRITE_BASE                   = 64
@@ -283,6 +288,10 @@ SPRITE_M                      = SPRITE_BASE + 151
 SPRITE_O                      = SPRITE_BASE + 152
 SPRITE_V                      = SPRITE_BASE + 153
 
+SPRITE_IMPALA_BACK_1          = SPRITE_BASE + 154
+SPRITE_IMPALA_BACK_2          = SPRITE_BASE + 155
+SPRITE_IMPALA_BACK_SMALL      = SPRITE_BASE + 156
+
 ;offset from calculated char pos to true sprite pos
 SPRITE_CENTER_OFFSET_X  = 8
 SPRITE_CENTER_OFFSET_Y  = 11
@@ -353,6 +362,7 @@ TYPE_BOSS5              = 32
 TYPE_BOSS6              = 33
 TYPE_BOSS7              = 34
 TYPE_BOSS_PART          = 35
+TYPE_EXTRO_IMPALA       = 36
 
 OBJECT_HEIGHT           = 8 * 2
 
@@ -548,9 +558,11 @@ TitleScreenWithoutIRQ
           ;initialise music player
           ldx #0
           ldy #0
+          lda SFX_MODE
+          bne +
           lda #MUSIC_TITLE_TUNE
           jsr MUSIC_PLAYER
-          
++          
 }  
           
           ldx #0
@@ -584,6 +596,8 @@ TitleScreenWithoutIRQ
           lda #21
           sta PARAM2
           jsr DisplayText
+          
+          jsr DisplaySfxMode
           
           ;display high scores
           ;x,y pos of name
@@ -680,6 +694,69 @@ TitleScreenWithoutIRQ
           cmp #8
           bne .FadeLine
 
+          ;switch through music/sfx mode
+          lda #$04
+          bit JOYSTICK_PORT_II
+          bne .NotLeftPressed
+          
+          lda LEFT_RELEASED
+          beq .LeftPressed
+          
+          lda SFX_MODE
+          eor #$01
+          sta SFX_MODE
+          jsr DisplaySfxMode
+          
+          lda SFX_MODE
+          beq +
+          
+          lda #MUSIC_PICKUP
+          jmp ++
++          
+          lda #MUSIC_TITLE_TUNE
+++          
+          jsr MUSIC_PLAYER
+          
+          
+          lda #0
+          jmp .LeftPressed
+
+.NotLeftPressed          
+          lda #1
+.LeftPressed          
+          sta LEFT_RELEASED
+
+          lda #$08
+          bit JOYSTICK_PORT_II
+          bne .NotRightPressed
+          
+          lda RIGHT_RELEASED
+          beq .RightPressed
+          
+          lda SFX_MODE
+          eor #$01
+          sta SFX_MODE
+          jsr DisplaySfxMode
+          
+          lda SFX_MODE
+          beq +
+          
+          lda #MUSIC_PICKUP
+          jmp ++
++          
+          lda #MUSIC_TITLE_TUNE
+++          
+          jsr MUSIC_PLAYER
+          
+          lda #0
+          jmp .RightPressed
+
+.NotRightPressed          
+          lda #1
+.RightPressed          
+          sta RIGHT_RELEASED
+
+
           lda #$01
           bit JOYSTICK_PORT_II
           bne .NotUpPressed
@@ -769,11 +846,14 @@ TitleScreenWithoutIRQ
 .Restart
           jsr WaitFrame
           jsr SetGameIRQ
-
+          
 !ifdef MUSIC_PLAYING{
           ;initialise music player
+          lda SFX_MODE
+          bne +
           lda #MUSIC_GET_READY_GAME_OVER_TUNE
           jsr MUSIC_PLAYER
++
 }          
 
           lda #0
@@ -893,15 +973,41 @@ DisplayScoreDisplay
           
 !ifdef MUSIC_PLAYING{
           ;initialise music player
+          lda SFX_MODE
+          bne +
           lda #MUSIC_IN_GAME_TUNE
           jsr MUSIC_PLAYER
-          
++
 }          
           lda #$1b
           sta VIC_CONTROL_MODE
 
           jmp GameLoop
+
+
+!zone DisplaySfxMode
+DisplaySfxMode
+          lda SFX_MODE
+          bne +
           
+          lda #<TEXT_MUSIC
+          sta ZEROPAGE_POINTER_1
+          lda #>TEXT_MUSIC
+          jmp .DisplaySfxMode
++          
+          lda #<TEXT_SFX
+          sta ZEROPAGE_POINTER_1
+          lda #>TEXT_SFX
+
+.DisplaySfxMode
+          sta ZEROPAGE_POINTER_1 + 1
+          lda #34
+          sta PARAM1
+          lda #24
+          sta PARAM2
+          jmp DisplayText
+
+
 ;------------------------------------------------------------
 ;story pages
 ;------------------------------------------------------------
@@ -1615,6 +1721,15 @@ GameFlowControl
 
 
 GoToNextLevel
+          ;handle extro if last boss level finished
+          ;lda LEVEL_CONFIG
+          ;and #$10
+          ;beq .NoExtro
+          
+          ;jmp Extro
+          
+.NoExtro          
+          ;handle door anim?
           lda LEVEL_CONFIG
           and #$04
           beq .NoDoorAnim
@@ -1685,6 +1800,8 @@ GoToNextLevel
           rts
 
 
+          
+
 !zone HandleFinalBossIntro
 HandleFinalBossIntro
           inc FINAL_INTRO_TIMER_DELAY
@@ -1718,6 +1835,7 @@ HandleFinalBossIntro
           ;disable intro flag
           lda LEVEL_CONFIG
           and #$f7
+          ora #$10
           sta LEVEL_CONFIG
           
           ;spawn boss
@@ -2158,6 +2276,7 @@ CheckForHighscore
           bne .GameOverDelay
           
           
+HighScoreDirect          
           ;check for highscore
           lda #0
           sta VIC_SPRITE_ENABLE
@@ -2363,9 +2482,11 @@ CheckForHighscore
           
 !ifdef MUSIC_PLAYING{
           ;initialise music player
+          lda SFX_MODE
+          bne +
           lda #MUSIC_GET_READY_GAME_OVER_TUNE
           jsr MUSIC_PLAYER
-          
++          
 }          
           ;restore bitmap logo colors
           ldx #0
@@ -2770,6 +2891,14 @@ PlayerControl
 .PickItem          
           ;pick item!
           jsr PickItem
+          
+          lda SFX_MODE
+          beq +
+          lda #MUSIC_PICKUP
+          jsr MUSIC_PLAYER
++          
+          ldx PARAM6
+          jmp .LastItemReached
           
 .NextItem
           iny
@@ -3467,6 +3596,13 @@ RedrawItems
 FireShot
           stx PARAM6
           
+          lda SFX_MODE
+          beq +
+          lda #MUSIC_PLAYER_SHOOT
+          jsr MUSIC_PLAYER
++          
+          
+          
           dec PLAYER_SHELLS
           ldy PLAYER_SHELLS
           
@@ -3655,6 +3791,13 @@ FireShot
           jsr IncreaseScore
 
           jsr KillEnemy
+          
+          lda SFX_MODE
+          beq +
+          lda #MUSIC_ENEMY_DIE
+          jsr MUSIC_PLAYER
++          
+          
           jmp .ShotDone
           
 
@@ -4674,159 +4817,6 @@ ObjectWalkOrJumpRight
           rts
           
           
-;------------------------------------------------------------
-;checks if an object can walk or jump right (jump if would fall off)
-;x = object index
-;returns 0 if blocked
-;returns 1 if possible
-;------------------------------------------------------------
-!zone CanWalkOrJumpRight
-CanWalkOrJumpRight
-          ldy SPRITE_CHAR_POS_Y,x
-          dey
-          lda SCREEN_LINE_OFFSET_TABLE_LO,y
-          sta ZEROPAGE_POINTER_1
-          lda SCREEN_BACK_LINE_OFFSET_TABLE_HI,y
-          sta ZEROPAGE_POINTER_1 + 1
-          
-          ldy SPRITE_CHAR_POS_X,x
-          iny
-          lda (ZEROPAGE_POINTER_1),y
-          
-          jsr IsCharBlocking
-          bne .BlockedRight
-          
-          tya
-          clc
-          adc #40
-          tay
-          lda (ZEROPAGE_POINTER_1),y
-          jsr IsCharBlocking
-          bne .BlockedRight
-
-          ;is a hole in front?
-          ldy SPRITE_CHAR_POS_Y,x
-          iny
-          lda SCREEN_LINE_OFFSET_TABLE_LO,y
-          sta ZEROPAGE_POINTER_1
-          lda SCREEN_BACK_LINE_OFFSET_TABLE_HI,y
-          sta ZEROPAGE_POINTER_1 + 1
-          
-          ldy SPRITE_CHAR_POS_X,x
-          iny
-
-          lda (ZEROPAGE_POINTER_1),y
-          jsr IsCharBlockingFall
-          bne .NoHole
-
-          lda #2
-          rts
-          
-.NoHole          
-          lda #1
-          rts
-          
-.BlockedRight          
-          lda #0
-          rts
-
-
-;------------------------------------------------------------
-;move object up if not blocked
-;x = object index
-;------------------------------------------------------------
-!zone ObjectMoveUpBlocking
-ObjectMoveUpBlocking
-          
-          lda SPRITE_CHAR_POS_Y_DELTA,x
-          beq .CheckCanMoveUp
-          
-.CanMoveUp
-          dec SPRITE_CHAR_POS_Y_DELTA,x
-          
-          lda SPRITE_CHAR_POS_Y_DELTA,x
-          cmp #$ff
-          bne .NoCharStep
-          
-          dec SPRITE_CHAR_POS_Y,x
-          lda #7
-          sta SPRITE_CHAR_POS_Y_DELTA,x
-          
-.NoCharStep          
-          jsr MoveSpriteUp
-          lda #1
-          rts
-          
-.CheckCanMoveUp
-          lda SPRITE_CHAR_POS_Y,x
-          cmp MOVE_BORDER_TOP
-          beq .BlockedUp
-
-          lda SPRITE_CHAR_POS_X_DELTA,x
-          beq .NoSecondCharCheckNeeded
-          
-          ldy SPRITE_CHAR_POS_Y,x
-          dey
-          dey
-          lda SCREEN_LINE_OFFSET_TABLE_LO,y
-          sta ZEROPAGE_POINTER_1
-          lda SCREEN_BACK_LINE_OFFSET_TABLE_HI,y
-          sta ZEROPAGE_POINTER_1 + 1
-
-          ldy SPRITE_CHAR_POS_X,x
-          iny
-          
-          lda (ZEROPAGE_POINTER_1),y
-          
-          jsr IsCharBlocking
-          bne .BlockedUp
-          
-.NoSecondCharCheckNeeded          
-
-          ldy SPRITE_CHAR_POS_Y,x
-          dey
-          dey
-          lda SCREEN_LINE_OFFSET_TABLE_LO,y
-          sta ZEROPAGE_POINTER_1
-          lda SCREEN_BACK_LINE_OFFSET_TABLE_HI,y
-          sta ZEROPAGE_POINTER_1 + 1
-          
-          ldy SPRITE_CHAR_POS_X,x
-          
-          lda (ZEROPAGE_POINTER_1),y
-          
-          jsr IsCharBlocking
-          bne .BlockedUp
-          
-          jmp .CanMoveUp
-          
-.BlockedUp
-          lda #0
-          rts
-          
-          
-;------------------------------------------------------------
-;move object up
-;x = object index
-;------------------------------------------------------------
-!zone ObjectMoveUp
-ObjectMoveUp
-          
-          dec SPRITE_CHAR_POS_Y_DELTA,x
-          
-          lda SPRITE_CHAR_POS_Y_DELTA,x
-          cmp #$ff
-          bne .NoCharStep
-          
-          dec SPRITE_CHAR_POS_Y,x
-          lda #7
-          sta SPRITE_CHAR_POS_Y_DELTA,x
-          
-.NoCharStep          
-          jmp MoveSpriteUp
-          
-          
-          
 
 
 ;place the data at a valid bitmap position, this avoids copying the data        
@@ -5080,6 +5070,407 @@ SCREEN_BACK_LINE_OFFSET_TABLE_HI
 * = $3000
 MUSIC_PLAYER
 !binary "music.bin",,2
+
+;------------------------------------------------------------
+;checks if an object can walk or jump right (jump if would fall off)
+;x = object index
+;returns 0 if blocked
+;returns 1 if possible
+;------------------------------------------------------------
+!zone CanWalkOrJumpRight
+CanWalkOrJumpRight
+          ldy SPRITE_CHAR_POS_Y,x
+          dey
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          lda SCREEN_BACK_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+          
+          ldy SPRITE_CHAR_POS_X,x
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          
+          jsr IsCharBlocking
+          bne .BlockedRight
+          
+          tya
+          clc
+          adc #40
+          tay
+          lda (ZEROPAGE_POINTER_1),y
+          jsr IsCharBlocking
+          bne .BlockedRight
+
+          ;is a hole in front?
+          ldy SPRITE_CHAR_POS_Y,x
+          iny
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          lda SCREEN_BACK_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+          
+          ldy SPRITE_CHAR_POS_X,x
+          iny
+
+          lda (ZEROPAGE_POINTER_1),y
+          jsr IsCharBlockingFall
+          bne .NoHole
+
+          lda #2
+          rts
+          
+.NoHole          
+          lda #1
+          rts
+          
+.BlockedRight          
+          lda #0
+          rts
+
+
+!zone Extro
+Extro
+          lda #$0b
+          sta VIC_CONTROL_MODE
+          jsr WaitFrame
+
+          lda #0
+          sta VIC_SPRITE_ENABLE
+          sta VIC_SPRITE_X_EXTEND
+          sta SPRITE_POS_X_EXTEND
+          sta MOVE_STONES
+          
+          ;switch to charset 1
+          lda #12
+          sta VIC_CHARSET_MULTICOLOR_1
+          lda #8
+          sta VIC_CHARSET_MULTICOLOR_2
+          lda #$3e
+          sta VIC_MEMORY_CONTROL
+
+          ;clear screen
+          lda #32
+          ldy #9
+          jsr ClearScreen
+          jsr ResetObjects
+          
+          lda #18
+          sta PARAM1
+          lda #28
+          sta PARAM2
+          lda #TYPE_EXTRO_IMPALA
+          sta PARAM3
+          ldx #0
+          lda #1
+          jsr SpawnObject
+          lda #21
+          sta PARAM1
+          ldx #1
+          jsr SpawnObject
+          lda #SPRITE_IMPALA_BACK_2
+          sta SPRITE_POINTER_BASE + 1
+
+          ;prepare road stones
+          lda #148
+          sta SCREEN_CHAR +  9 + 21 * 40
+          sta SCREEN_CHAR + 10 + 18 * 40
+          sta SCREEN_CHAR + 11 + 16 * 40
+          sta SCREEN_CHAR + 12 + 15 * 40
+          
+          sta SCREEN_CHAR + 30 + 21 * 40
+          sta SCREEN_CHAR + 29 + 18 * 40
+          sta SCREEN_CHAR + 28 + 16 * 40
+          sta SCREEN_CHAR + 27 + 15 * 40
+
+          lda #149
+          sta SCREEN_CHAR + 15 + 14 * 40
+          sta SCREEN_CHAR + 16 + 12 * 40
+          sta SCREEN_CHAR + 17 + 11 * 40
+          
+          sta SCREEN_CHAR + 24 + 14 * 40
+          sta SCREEN_CHAR + 23 + 12 * 40
+          sta SCREEN_CHAR + 22 + 11 * 40
+          
+          ;road chars to hide car sprite
+          lda #150
+          sta SCREEN_CHAR + 17 + 15 * 40
+          sta SCREEN_CHAR + 18 + 15 * 40
+          sta SCREEN_CHAR + 19 + 15 * 40
+          sta SCREEN_CHAR + 20 + 15 * 40
+          sta SCREEN_CHAR + 21 + 15 * 40
+          sta SCREEN_CHAR + 22 + 15 * 40
+          sta SCREEN_CHAR + 17 + 16 * 40
+          sta SCREEN_CHAR + 18 + 16 * 40
+          sta SCREEN_CHAR + 19 + 16 * 40
+          sta SCREEN_CHAR + 20 + 16 * 40
+          sta SCREEN_CHAR + 21 + 16 * 40
+          sta SCREEN_CHAR + 22 + 16 * 40
+          sta SCREEN_CHAR + 17 + 17 * 40
+          sta SCREEN_CHAR + 18 + 17 * 40
+          sta SCREEN_CHAR + 19 + 17 * 40
+          sta SCREEN_CHAR + 20 + 17 * 40
+          sta SCREEN_CHAR + 21 + 17 * 40
+          sta SCREEN_CHAR + 22 + 17 * 40
+          
+          sta SCREEN_CHAR + 18 + 11 * 40
+          sta SCREEN_CHAR + 19 + 11 * 40
+          sta SCREEN_CHAR + 20 + 11 * 40
+          sta SCREEN_CHAR + 21 + 11 * 40
+          sta SCREEN_CHAR + 18 + 12 * 40
+          sta SCREEN_CHAR + 19 + 12 * 40
+          sta SCREEN_CHAR + 20 + 12 * 40
+          sta SCREEN_CHAR + 21 + 12 * 40
+          lda #8
+          sta SCREEN_COLOR + 17 + 15 * 40
+          sta SCREEN_COLOR + 18 + 15 * 40
+          sta SCREEN_COLOR + 19 + 15 * 40
+          sta SCREEN_COLOR + 20 + 15 * 40
+          sta SCREEN_COLOR + 21 + 15 * 40
+          sta SCREEN_COLOR + 22 + 15 * 40
+          sta SCREEN_COLOR + 17 + 16 * 40
+          sta SCREEN_COLOR + 18 + 16 * 40
+          sta SCREEN_COLOR + 19 + 16 * 40
+          sta SCREEN_COLOR + 20 + 16 * 40
+          sta SCREEN_COLOR + 21 + 16 * 40
+          sta SCREEN_COLOR + 22 + 16 * 40
+          sta SCREEN_COLOR + 17 + 17 * 40
+          sta SCREEN_COLOR + 18 + 17 * 40
+          sta SCREEN_COLOR + 19 + 17 * 40
+          sta SCREEN_COLOR + 20 + 17 * 40
+          sta SCREEN_COLOR + 21 + 17 * 40
+          sta SCREEN_COLOR + 22 + 17 * 40
+
+          sta SCREEN_COLOR + 18 + 11 * 40
+          sta SCREEN_COLOR + 19 + 11 * 40
+          sta SCREEN_COLOR + 20 + 11 * 40
+          sta SCREEN_COLOR + 21 + 11 * 40
+          sta SCREEN_COLOR + 18 + 12 * 40
+          sta SCREEN_COLOR + 19 + 12 * 40
+          sta SCREEN_COLOR + 20 + 12 * 40
+          sta SCREEN_COLOR + 21 + 12 * 40
+
+          lda #$1b
+          sta VIC_CONTROL_MODE
+
+          ldx #0
+          stx BUTTON_PRESSED
+          stx BUTTON_RELEASED 
+          stx VIC_SPRITE_PRIORITY
+
+.ExtroLoop          
+          jsr WaitFrame
+          jsr ObjectControl
+          
+          lda #$10
+          bit JOYSTICK_PORT_II
+          bne .ButtonNotPressed
+          
+          ;button pushed
+          lda BUTTON_RELEASED
+          beq .ExtroLoop
+          
+          lda #0
+          sta VIC_SPRITE_PRIORITY
+          jmp HighScoreDirect
+          
+.ButtonNotPressed
+          lda #1
+          sta BUTTON_RELEASED
+          jmp .ExtroLoop
+
+          ;jmp GameOver
+          
+
+
+!zone BehaviourImpalaExtro
+BehaviourImpalaExtro
+          lda SPRITE_STATE,x
+          cmp #4
+          bcs .NoMovingUp
+          
+.MoveUp2          
+          tay
+          inc SPRITE_MOVE_POS,x
+          lda SPRITE_MOVE_POS,x
+          cmp EXTRO_MOVE_TABLE_COUNT,y
+          beq .NextStatePos
+          
+          lda EXTRO_MOVE_TABLE_DELTA,y
+          sta PARAM5
+          
+-          
+          jsr MoveSpriteUp
+          dec PARAM5
+          bne -
+          
+          
+          ;need to toggle prio?
+          lda SPRITE_STATE,x
+          cmp #6
+          bne +
+          lda SPRITE_MOVE_POS,x
+          cmp #5
+          bne +
+          
+          lda #0
+          sta VIC_SPRITE_PRIORITY
+          
++          
+          rts
+          
+.NextStatePos
+          inc SPRITE_STATE,x
+          lda #0
+          sta SPRITE_MOVE_POS,x 
+          jmp BehaviourImpalaExtro
+          
+.NoMovingUp
+          beq .MoveDown1
+          cmp #4
+          bcc .MoveDown1
+          cmp #5 + 3
+          bcs .MoveDown1
+          jmp .MoveUp2
+          
+.MoveDown1
+          lda #3
+          sta VIC_SPRITE_PRIORITY
+          jsr MoveSpriteDown
+          
+          inc SPRITE_MOVE_POS,x
+          ldy SPRITE_STATE,x
+          lda SPRITE_MOVE_POS,x
+          cmp EXTRO_MOVE_TABLE_DELTA,y
+          beq +
+          rts
+          
++
+          ;done going down
+          cpx #0
+          bne .RemoveMe
+          
+          lda SPRITE_STATE,x
+          cmp #8
+          beq .CarDone
+          
+          lda #SPRITE_IMPALA_BACK_SMALL
+          sta SPRITE_POINTER_BASE
+          lda #160 + 12
+          sta VIC_SPRITE_X_POS
+          jmp .NextStatePos
+          
+.CarDone
+          ;restore prio
+          lda #0
+          sta SPRITE_MOVE_POS,x
+.RemoveMe          
+          jmp RemoveObject
+
+
+EXTRO_MOVE_TABLE_DELTA
+          !byte 4,3,2,1,21,3,2,1,10
+          
+EXTRO_MOVE_TABLE_COUNT
+          !byte 5,20,15,10,0,5,12,20,0
+
+
+;------------------------------------------------------------
+;move object up if not blocked
+;x = object index
+;------------------------------------------------------------
+!zone ObjectMoveUpBlocking
+ObjectMoveUpBlocking
+          
+          lda SPRITE_CHAR_POS_Y_DELTA,x
+          beq .CheckCanMoveUp
+          
+.CanMoveUp
+          dec SPRITE_CHAR_POS_Y_DELTA,x
+          
+          lda SPRITE_CHAR_POS_Y_DELTA,x
+          cmp #$ff
+          bne .NoCharStep
+          
+          dec SPRITE_CHAR_POS_Y,x
+          lda #7
+          sta SPRITE_CHAR_POS_Y_DELTA,x
+          
+.NoCharStep          
+          jsr MoveSpriteUp
+          lda #1
+          rts
+          
+.CheckCanMoveUp
+          lda SPRITE_CHAR_POS_Y,x
+          cmp MOVE_BORDER_TOP
+          beq .BlockedUp
+
+          lda SPRITE_CHAR_POS_X_DELTA,x
+          beq .NoSecondCharCheckNeeded
+          
+          ldy SPRITE_CHAR_POS_Y,x
+          dey
+          dey
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          lda SCREEN_BACK_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+
+          ldy SPRITE_CHAR_POS_X,x
+          iny
+          
+          lda (ZEROPAGE_POINTER_1),y
+          
+          jsr IsCharBlocking
+          bne .BlockedUp
+          
+.NoSecondCharCheckNeeded          
+
+          ldy SPRITE_CHAR_POS_Y,x
+          dey
+          dey
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          lda SCREEN_BACK_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+          
+          ldy SPRITE_CHAR_POS_X,x
+          
+          lda (ZEROPAGE_POINTER_1),y
+          
+          jsr IsCharBlocking
+          bne .BlockedUp
+          
+          jmp .CanMoveUp
+          
+.BlockedUp
+          lda #0
+          rts
+          
+          
+;------------------------------------------------------------
+;move object up
+;x = object index
+;------------------------------------------------------------
+!zone ObjectMoveUp
+ObjectMoveUp
+          
+          dec SPRITE_CHAR_POS_Y_DELTA,x
+          
+          lda SPRITE_CHAR_POS_Y_DELTA,x
+          cmp #$ff
+          bne .NoCharStep
+          
+          dec SPRITE_CHAR_POS_Y,x
+          lda #7
+          sta SPRITE_CHAR_POS_Y_DELTA,x
+          
+.NoCharStep          
+          jmp MoveSpriteUp
+          
+          
+          
+
 
 
 ;------------------------------------------------------------
@@ -7881,6 +8272,13 @@ KillPlayer
           sta SPRITE_HELD
           
 .PlayerWasDean         
+
+          lda SFX_MODE
+          beq +
+          lda #MUSIC_PLAYER_DIE
+          jsr MUSIC_PLAYER
++          
+          ldx CURRENT_INDEX
           rts
 
 ;------------------------------------------------------------
@@ -13551,6 +13949,10 @@ UP_RELEASED
           !byte 0
 DOWN_RELEASED
           !byte 0
+LEFT_RELEASED
+          !byte 0
+RIGHT_RELEASED
+          !byte 0
           
 JUMP_TABLE
           !byte 8,8,7,5,3,2,1,1,1,0
@@ -13714,6 +14116,7 @@ ENEMY_BEHAVIOUR_TABLE_LO
           !byte <BehaviourBoss6
           !byte <BehaviourBoss7
           !byte <BehaviourBossHelper
+          !byte <BehaviourImpalaExtro
           
 ENEMY_BEHAVIOUR_TABLE_HI
           !byte >PlayerControl
@@ -13751,6 +14154,7 @@ ENEMY_BEHAVIOUR_TABLE_HI
           !byte >BehaviourBoss6
           !byte >BehaviourBoss7
           !byte >BehaviourBossHelper
+          !byte >BehaviourImpalaExtro
           
 ;behaviour for an enemy being hit          
 ENEMY_HIT_BEHAVIOUR_TABLE_LO          
@@ -13788,6 +14192,7 @@ ENEMY_HIT_BEHAVIOUR_TABLE_LO
           !byte <HitBehaviourHurt     ;boss 6
           !byte <HitBehaviourBoss7    ;boss 7
           !byte <HitBehaviourBossHelper
+          !byte <BehaviourNone        ;impala 1
           
           
 ENEMY_HIT_BEHAVIOUR_TABLE_HI
@@ -13825,6 +14230,7 @@ ENEMY_HIT_BEHAVIOUR_TABLE_HI
           !byte >HitBehaviourHurt     ;boss 6
           !byte >HitBehaviourHurt     ;boss 7
           !byte >HitBehaviourBossHelper
+          !byte >BehaviourNone        ;impala 1
           
 ;0 = no enemy
 ;1 = normal enemy
@@ -13867,6 +14273,7 @@ IS_TYPE_ENEMY
           !byte 3     ;boss6
           !byte 3     ;boss7
           !byte 3     ;boss helper
+          !byte 0     ;impala 1
           
 TYPE_START_SPRITE
           !byte 0     ;dummy entry for inactive object
@@ -13905,6 +14312,7 @@ TYPE_START_SPRITE
           !byte SPRITE_BOSS_TORSO_R
           !byte SPRITE_BOSS_HEAD
           !byte SPRITE_BOSS_HEAD
+          !byte SPRITE_IMPALA_BACK_1
           
 TYPE_START_COLOR
           !byte 0
@@ -13943,6 +14351,7 @@ TYPE_START_COLOR
           !byte 1     ;boss6
           !byte 2     ;boss7
           !byte 2     ;boss helper
+          !byte 2     ;impala back
           
 TYPE_START_MULTICOLOR
           !byte 0     ;dummy
@@ -13981,6 +14390,7 @@ TYPE_START_MULTICOLOR
           !byte 0     ;boss6
           !byte 0     ;boss7
           !byte 0     ;boss helper
+          !byte 1     ;impala 1
           
 TYPE_START_HP
           !byte 0     ;dummy
@@ -14018,9 +14428,8 @@ TYPE_START_HP
           !byte 10    ;boss5
           !byte 10    ;boss6
           !byte 25    ;boss7
-          !byte 1     ;boss helper
-          ;!byte 25    ;boss7
-          ;!byte 5     ;boss helper
+          !byte 5     ;boss helper
+          !byte 0     ;impala 1
           
 TYPE_ANNOYED_COLOR
           !byte 0     ;dummy
@@ -14059,6 +14468,7 @@ TYPE_ANNOYED_COLOR
           !byte 1     ;boss6
           !byte 2     ;boss7
           !byte 2     ;boss helper
+          !byte 0     ;impala 1
           
           
 ;enemy start direction, 2 bits per dir.
@@ -14113,6 +14523,7 @@ TYPE_START_DIRECTION
           !byte %00001010     ;boss6
           !byte %00001010     ;boss7
           !byte %00001010     ;boss helper
+          !byte 0             ;impala 1
           
 TYPE_START_STATE
           !byte 0             ;dummy
@@ -14151,6 +14562,7 @@ TYPE_START_STATE
           !byte 128           ;boss6
           !byte 128           ;boss7
           !byte 0             ;boss helper
+          !byte 0             ;impala 1
           
 TYPE_START_DELTA_Y
           !byte 0     ;dummy
@@ -14189,6 +14601,7 @@ TYPE_START_DELTA_Y
           !byte 0     ;boss6
           !byte 0     ;boss7
           !byte 0             ;boss helper
+          !byte 0     ;impala 1
           
 BAT_ANIMATION
           !byte SPRITE_BAT_1
@@ -14377,13 +14790,18 @@ TEXT_GAME_MODE_LO
           !byte <TEXT_GAME_MODE_SINGLE_DEAN, <TEXT_GAME_MODE_SINGLE_SAM, <TEXT_GAME_MODE_COOP
 TEXT_GAME_MODE_HI
           !byte >TEXT_GAME_MODE_SINGLE_DEAN, >TEXT_GAME_MODE_SINGLE_SAM, >TEXT_GAME_MODE_COOP
-
+          
 TEXT_GAME_MODE_SINGLE_DEAN
           !text "SINGLE PLAYER DEAN*"
 TEXT_GAME_MODE_SINGLE_SAM
           !text "SINGLE PLAYER SAM *"
 TEXT_GAME_MODE_COOP
           !text " COOPERATIVE PLAY *"
+          
+TEXT_MUSIC
+          !text "MUSIC*"
+TEXT_SFX
+          !text " SFX *"
           
 TEXT_FIRE_TO_START
           !text "PRESS FIRE TO PLAY*"
@@ -14651,6 +15069,8 @@ BOSS_DELTA_TABLE_Y
           !byte 0, 1, 0, 1, 1, 0, 1, 0
           
 TWO_PLAYER_MODE_ACTIVE
+          !byte 0
+SFX_MODE
           !byte 0
           
 !source "level_data.asm"
