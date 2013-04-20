@@ -48,7 +48,7 @@ CIA_PRA                 = $dd00
 
 PROCESSOR_PORT          = $01
 
-START_LEVEL             = 43
+START_LEVEL             = 42
 
 MUSIC_IN_GAME_TUNE		    = $00
 MUSIC_TITLE_TUNE			     = $01
@@ -2030,6 +2030,7 @@ CheckCollisions
           beq +
  
           jsr RemoveForceBeam
+          ldx PARAM6
           lda #0
           sta SPRITE_HELD
  +
@@ -2352,7 +2353,15 @@ PlayerControl
           jsr SamUseForce
           beq .NoEnemyHeld
           
+          ;release beam when moving
+          lda SAM_FORCE_START_Y
+          clc
+          adc #1
+          cmp SPRITE_CHAR_POS_Y,x
+          bne .SamNotFirePushed
+          
           ;Sam needs to keep pressed
+          jsr RedrawForceBeam
           
           ldy SPRITE_HELD
           dey
@@ -2414,11 +2423,11 @@ PlayerControl
 
           jsr KillEnemy
           
-          ldx PARAM6
           lda #0
           sta SPRITE_HELD
           
           jsr RemoveForceBeam
+          ldx PARAM6
           jmp .NotFirePushed
           
           
@@ -2429,6 +2438,7 @@ PlayerControl
           lda #0
           sta SPRITE_HELD
           jsr RemoveForceBeam
+          ldx PARAM6
 +          
           sta PLAYER_SHOT_PAUSE,x
           sta PLAYER_FIRE_PRESSED_TIME,x
@@ -2848,6 +2858,7 @@ RemoveItemImage
           sta (ZEROPAGE_POINTER_1),y
           
           ;repaint other items to avoid broken overlapped items
+RedrawItems          
           ldx #0
 .RepaintLoop
           lda ITEM_ACTIVE,x
@@ -3251,9 +3262,10 @@ SamUseForce
           dex
  
 - 
+          ;draw beam char
           lda #253
           sta (ZEROPAGE_POINTER_1),y
-          lda #6
+          lda #1
           sta (ZEROPAGE_POINTER_2),y
           
           inc SAM_FORCE_LENGTH
@@ -3377,6 +3389,36 @@ RemoveForceBeam
           dec SAM_FORCE_LENGTH
           bne -
           
+          jsr RedrawItems
+          rts
+ 
+ 
+ 
+;redraw force beam (randomly)
+!zone RedrawForceBeam          
+RedrawForceBeam          
+          ldy SAM_FORCE_START_Y
+          
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          lda SCREEN_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+          
+          lda SAM_FORCE_LENGTH
+          sta PARAM1
+          
+          ldy SAM_FORCE_START_X
+          
+-         
+          jsr GenerateRandomNumber
+          and #$03
+          clc
+          adc #252
+          sta (ZEROPAGE_POINTER_1),y
+          
+          iny
+          dec PARAM1
+          bne -
           rts
  
  
@@ -10761,8 +10803,8 @@ CopyCharSet
 
           ;only copy 254 chars to keep irq vectors intact
           inc PARAM2
-          lda PARAM2
-          cmp #254
+          ;lda PARAM2
+          ;cmp #254
           beq .CopyCharsetDone
           ldx #$00
           jmp .NextLine
@@ -10806,8 +10848,6 @@ CopyCharSet2
 
           ;only copy 254 chars to keep irq vectors intact
           inc PARAM2
-          lda PARAM2
-          cmp #254
           beq .CopyCharsetDone
           ldx #$00
           jmp .NextLine
