@@ -1722,11 +1722,11 @@ GameFlowControl
 
 GoToNextLevel
           ;handle extro if last boss level finished
-          ;lda LEVEL_CONFIG
-          ;and #$10
-          ;beq .NoExtro
+          lda LEVEL_CONFIG
+          and #$10
+          beq .NoExtro
           
-          ;jmp Extro
+          jmp Extro
           
 .NoExtro          
           ;handle door anim?
@@ -5139,118 +5139,32 @@ Extro
           sta SPRITE_POS_X_EXTEND
           sta MOVE_STONES
           
-          ;switch to charset 1
-          lda #12
-          sta VIC_CHARSET_MULTICOLOR_1
-          lda #8
-          sta VIC_CHARSET_MULTICOLOR_2
-          lda #$3e
-          sta VIC_MEMORY_CONTROL
-
           ;clear screen
           lda #32
-          ldy #9
+          ldy #1
           jsr ClearScreen
           jsr ResetObjects
           
-          lda #18
-          sta PARAM1
-          lda #28
-          sta PARAM2
-          lda #TYPE_EXTRO_IMPALA
-          sta PARAM3
-          ldx #0
+          lda #<TEXT_EXTRO
+          sta ZEROPAGE_POINTER_1
+          lda #>TEXT_EXTRO
+          sta ZEROPAGE_POINTER_1 + 1
+          
+          lda #0
+          sta VIC_SPRITE_ENABLE
+          sta VIC_SPRITE_X_EXTEND
+          sta SPRITE_POS_X_EXTEND
+          sta MOVE_STONES
+          
           lda #1
-          jsr SpawnObject
-          lda #21
           sta PARAM1
-          ldx #1
-          jsr SpawnObject
-          lda #SPRITE_IMPALA_BACK_2
-          sta SPRITE_POINTER_BASE + 1
-
-          ;prepare road stones
-          lda #148
-          sta SCREEN_CHAR +  9 + 21 * 40
-          sta SCREEN_CHAR + 10 + 18 * 40
-          sta SCREEN_CHAR + 11 + 16 * 40
-          sta SCREEN_CHAR + 12 + 15 * 40
+          lda #1
+          sta PARAM2
+          jsr DisplayText
           
-          sta SCREEN_CHAR + 30 + 21 * 40
-          sta SCREEN_CHAR + 29 + 18 * 40
-          sta SCREEN_CHAR + 28 + 16 * 40
-          sta SCREEN_CHAR + 27 + 15 * 40
-
-          lda #149
-          sta SCREEN_CHAR + 15 + 14 * 40
-          sta SCREEN_CHAR + 16 + 12 * 40
-          sta SCREEN_CHAR + 17 + 11 * 40
-          
-          sta SCREEN_CHAR + 24 + 14 * 40
-          sta SCREEN_CHAR + 23 + 12 * 40
-          sta SCREEN_CHAR + 22 + 11 * 40
-          
-          ;road chars to hide car sprite
-          lda #150
-          sta SCREEN_CHAR + 17 + 15 * 40
-          sta SCREEN_CHAR + 18 + 15 * 40
-          sta SCREEN_CHAR + 19 + 15 * 40
-          sta SCREEN_CHAR + 20 + 15 * 40
-          sta SCREEN_CHAR + 21 + 15 * 40
-          sta SCREEN_CHAR + 22 + 15 * 40
-          sta SCREEN_CHAR + 17 + 16 * 40
-          sta SCREEN_CHAR + 18 + 16 * 40
-          sta SCREEN_CHAR + 19 + 16 * 40
-          sta SCREEN_CHAR + 20 + 16 * 40
-          sta SCREEN_CHAR + 21 + 16 * 40
-          sta SCREEN_CHAR + 22 + 16 * 40
-          sta SCREEN_CHAR + 17 + 17 * 40
-          sta SCREEN_CHAR + 18 + 17 * 40
-          sta SCREEN_CHAR + 19 + 17 * 40
-          sta SCREEN_CHAR + 20 + 17 * 40
-          sta SCREEN_CHAR + 21 + 17 * 40
-          sta SCREEN_CHAR + 22 + 17 * 40
-          
-          sta SCREEN_CHAR + 18 + 11 * 40
-          sta SCREEN_CHAR + 19 + 11 * 40
-          sta SCREEN_CHAR + 20 + 11 * 40
-          sta SCREEN_CHAR + 21 + 11 * 40
-          sta SCREEN_CHAR + 18 + 12 * 40
-          sta SCREEN_CHAR + 19 + 12 * 40
-          sta SCREEN_CHAR + 20 + 12 * 40
-          sta SCREEN_CHAR + 21 + 12 * 40
-          lda #8
-          sta SCREEN_COLOR + 17 + 15 * 40
-          sta SCREEN_COLOR + 18 + 15 * 40
-          sta SCREEN_COLOR + 19 + 15 * 40
-          sta SCREEN_COLOR + 20 + 15 * 40
-          sta SCREEN_COLOR + 21 + 15 * 40
-          sta SCREEN_COLOR + 22 + 15 * 40
-          sta SCREEN_COLOR + 17 + 16 * 40
-          sta SCREEN_COLOR + 18 + 16 * 40
-          sta SCREEN_COLOR + 19 + 16 * 40
-          sta SCREEN_COLOR + 20 + 16 * 40
-          sta SCREEN_COLOR + 21 + 16 * 40
-          sta SCREEN_COLOR + 22 + 16 * 40
-          sta SCREEN_COLOR + 17 + 17 * 40
-          sta SCREEN_COLOR + 18 + 17 * 40
-          sta SCREEN_COLOR + 19 + 17 * 40
-          sta SCREEN_COLOR + 20 + 17 * 40
-          sta SCREEN_COLOR + 21 + 17 * 40
-          sta SCREEN_COLOR + 22 + 17 * 40
-
-          sta SCREEN_COLOR + 18 + 11 * 40
-          sta SCREEN_COLOR + 19 + 11 * 40
-          sta SCREEN_COLOR + 20 + 11 * 40
-          sta SCREEN_COLOR + 21 + 11 * 40
-          sta SCREEN_COLOR + 18 + 12 * 40
-          sta SCREEN_COLOR + 19 + 12 * 40
-          sta SCREEN_COLOR + 20 + 12 * 40
-          sta SCREEN_COLOR + 21 + 12 * 40
-
           lda #$1b
           sta VIC_CONTROL_MODE
-
+          
           ldx #0
           stx BUTTON_PRESSED
           stx BUTTON_RELEASED 
@@ -5268,17 +5182,12 @@ Extro
           lda BUTTON_RELEASED
           beq .ExtroLoop
           
-          lda #0
-          sta VIC_SPRITE_PRIORITY
           jmp HighScoreDirect
           
 .ButtonNotPressed
           lda #1
           sta BUTTON_RELEASED
           jmp .ExtroLoop
-
-          ;jmp GameOver
-          
 
 
 !zone BehaviourImpalaExtro
@@ -15166,9 +15075,19 @@ TEXT_CHAPTER_6_END
 TEXT_STORY_7
           !text "ELKHORN, MONTANA.-"
           !text "THE WHOLE TOWN IS A GIANT CAGE-"
-          !text "PROTECTING A WELL IN THE CENTRE*"
+          !text "PROTECTING A WELL IN THE CENTRE-"
           !text "WE WILL HAVE TO GO DOWN THERE.*"
 
+TEXT_EXTRO
+          !text "THAT WAS A CLOSE CALL,-"
+          !text "WE STILL KICKED ITS ASS THOUGH.-"
+          !text "-"
+          !text "WELL DONE, THANK YOU FOR PLAYING!-"
+          !text "-"
+          !text "-"
+          !text "I NEED A REAL BIG BURGER NOW...--"
+          !text "YUP, ME TOO.*"
+          
 
 COLOR_FADE_POS
           !byte 0
