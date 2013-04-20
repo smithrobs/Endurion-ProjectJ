@@ -1,6 +1,19 @@
 ;compile to this filename
 !to "jmain.prg",cbm
 
+;memory layout
+
+;screen             $CC00 to $CFFF
+;screen back char   $C800 to $CBFF
+;screen back colro  $C400 to $C7FF
+;sprites            $D000 to $EFFF
+;charset            $F000 to $F800
+
+;TEST
+;sprites            $D000 to $F7FF
+;charset            $F800 to $FFFF
+
+
 ;define constants here
 KERNAL_GETIN            = $ffe4
 KERNAL_SETMSG           = $ff90
@@ -28,7 +41,7 @@ JOYSTICK_PORT_II        = $dc00
 
 CIA_PRA                 = $dd00
 
-START_LEVEL             = 0
+START_LEVEL             = 1
 
 
 ;placeholder for various temp parameters
@@ -47,6 +60,7 @@ ZEROPAGE_POINTER_3      = $21
 ZEROPAGE_POINTER_4      = $23
 
 ;address of the screen buffer
+;address of the screen buffer
 SCREEN_CHAR             = $CC00
 
 ;address of color ram
@@ -63,7 +77,7 @@ SCREEN_BACK_COLOR       = $C400
 SPRITE_POINTER_BASE     = SCREEN_CHAR + 1016
 
 ;number of sprites divided by four
-NUMBER_OF_SPRITES_DIV_4       = 128 / 4
+NUMBER_OF_SPRITES_DIV_4       = 136 / 4
 
 ;sprite number constant
 SPRITE_BASE                   = 64
@@ -223,6 +237,13 @@ SPRITE_DEVIL_WALK_L_2         = SPRITE_BASE + 125
 SPRITE_DEVIL_WALK_R_3         = SPRITE_BASE + 126
 SPRITE_DEVIL_WALK_L_3         = SPRITE_BASE + 127
 
+SPRITE_IMPALA_1               = SPRITE_BASE + 128
+SPRITE_IMPALA_2               = SPRITE_BASE + 129
+SPRITE_IMPALA_3               = SPRITE_BASE + 130
+SPRITE_DRIVERS                = SPRITE_BASE + 131
+SPRITE_DEBRIS_1               = SPRITE_BASE + 132
+SPRITE_DEBRIS_2               = SPRITE_BASE + 133
+
 ;offset from calculated char pos to true sprite pos
 SPRITE_CENTER_OFFSET_X  = 8
 SPRITE_CENTER_OFFSET_Y  = 11
@@ -277,6 +298,11 @@ TYPE_SLIME              = 17
 TYPE_FRANKENSTEIN       = 18
 TYPE_HAND               = 19
 TYPE_DEVIL              = 20
+TYPE_IMPALA_1           = 21
+TYPE_IMPALA_2           = 22
+TYPE_IMPALA_3           = 23
+TYPE_IMPALA_DRIVER      = 24
+TYPE_IMPALA_DEBRIS      = 25
 
 OBJECT_HEIGHT           = 8 * 2
 
@@ -310,12 +336,13 @@ GT_COOP                 = 2
           sta VIC_SPRITE_ENABLE
           
           ;set charset
-          lda #$3c
+          ;lda #$3c
+          lda #$3e
           sta VIC_MEMORY_CONTROL
 
           ;VIC bank
           lda CIA_PRA
-          and #$fc
+          and #$fd
           sta CIA_PRA
 
           ;check last used drive (or set to default)
@@ -634,6 +661,8 @@ TitleScreenWithoutIRQ
           jsr WaitFrame
           jsr ReleaseTitleIRQ
 
+          lda #0
+          jsr ShowStory
 
           ;game start values
           lda #3
@@ -728,6 +757,111 @@ TitleScreenWithoutIRQ
           sta PLAYER_INVINCIBLE          
           sta SPRITE_STATE
           
+          jmp GameLoop
+          
+;------------------------------------------------------------
+;story pages
+;------------------------------------------------------------
+!zone ShowStory
+ShowStory
+
+          ;clear screen
+          lda #32
+          ldy #1
+          jsr ClearScreen
+          
+          lda #<TEXT_STORY_1
+          sta ZEROPAGE_POINTER_1
+          lda #>TEXT_STORY_1
+          sta ZEROPAGE_POINTER_1 + 1
+          lda #1
+          sta PARAM1
+          lda #1
+          sta PARAM2
+          jsr DisplayText
+          
+          lda #41
+          sta PARAM1
+          lda #20
+          sta PARAM2
+          lda #TYPE_IMPALA_1
+          sta PARAM3
+          jsr FindEmptySpriteSlot
+          jsr SpawnObject
+
+          lda #44
+          sta PARAM1
+          lda #TYPE_IMPALA_DRIVER
+          sta PARAM3
+          jsr FindEmptySpriteSlot
+          jsr SpawnObject
+
+          lda #44
+          sta PARAM1
+          lda #TYPE_IMPALA_2
+          sta PARAM3
+          jsr FindEmptySpriteSlot
+          jsr SpawnObject
+
+          lda #47
+          sta PARAM1
+          lda #TYPE_IMPALA_3
+          sta PARAM3
+          jsr FindEmptySpriteSlot
+          jsr SpawnObject
+
+          lda #48
+          sta PARAM1
+          lda #TYPE_IMPALA_DEBRIS
+          sta PARAM3
+          jsr FindEmptySpriteSlot
+          jsr SpawnObject
+
+
+          lda #12
+          sta VIC_SPRITE_MULTICOLOR_1
+          lda #11
+          sta VIC_SPRITE_MULTICOLOR_2
+          
+          lda #0
+          sta BUTTON_RELEASED
+          
+.StoryLoop          
+          jsr WaitFrame
+          
+          jsr ObjectControl
+          ;ldx #0
+          ;jsr MoveSpriteLeft
+          ;inx
+          ;jsr MoveSpriteLeft
+          ;inx
+          ;jsr MoveSpriteLeft
+          ;inx
+          ;jsr MoveSpriteLeft
+          ;inx
+          ;jsr MoveSpriteLeft
+          
+          lda #$10
+          bit JOYSTICK_PORT_II
+          bne .ButtonNotPressed
+          
+          ;button pushed
+          lda BUTTON_RELEASED
+          beq .StoryLoop
+          
+          lda #0
+          sta VIC_SPRITE_ENABLE
+          lda #11
+          sta VIC_SPRITE_MULTICOLOR_1
+          lda #1
+          sta VIC_SPRITE_MULTICOLOR_2
+          rts
+          
+.ButtonNotPressed
+          lda #1
+          sta BUTTON_RELEASED
+          jmp .StoryLoop
+
 ;------------------------------------------------------------
 ;the main game loop
 ;------------------------------------------------------------
@@ -930,7 +1064,7 @@ IrqSetBitmapMode
 
           ;bitmap to lower half, screen char pos at 3 * 1024 ( + 16384)
           lda #%10111000
-          sta $D018
+          sta VIC_MEMORY_CONTROL
 
           JMP $ea31
 
@@ -965,8 +1099,8 @@ IrqSetTextMode
           sta $dd00
 
           ;bitmap to lower half, screen char pos at 3 * 1024 ( + 16384)
-          lda #%00111100
-          sta $D018
+          lda #%00111110
+          sta VIC_MEMORY_CONTROL
 
           jmp $ea31
 
@@ -3556,7 +3690,10 @@ ObjectControl
           cpx #8
           bne .ObjectLoop
           rts
-          
+
+!zone BehaviourNone
+BehaviourNone
+          rts
 
 ;------------------------------------------------------------
 ;simply move diagonal
@@ -3945,7 +4082,57 @@ BehaviourDevil
           sta SPRITE_POINTER_BASE,x
           rts
  
-  
+;------------------------------------------------------------
+;drive left/pause/drive off left
+;------------------------------------------------------------
+!zone BehaviourImpala
+BehaviourImpalaDebris
+          inc SPRITE_ANIM_DELAY,x
+          lda SPRITE_ANIM_DELAY,x
+          and #$04
+          lsr
+          lsr
+          clc
+          adc #SPRITE_DEBRIS_1
+          sta SPRITE_POINTER_BASE,x
+
+BehaviourImpala
+
+          lda SPRITE_STATE,x
+          beq .DriveFirstHalf
+          cmp #1
+          beq .HandlePause
+          
+          ;drive off
+          jsr MoveSpriteLeft
+          lda SPRITE_POS_X,x
+          beq .DriveDone
+          rts
+          
+.DriveDone
+          jsr RemoveObject
+          rts
+          
+.DriveFirstHalf
+          jsr MoveSpriteLeft
+          inc SPRITE_MOVE_POS,x
+          lda SPRITE_MOVE_POS,x
+          cmp #200
+          beq .NextState
+          rts
+          
+.NextState       
+          inc SPRITE_STATE,x
+          lda #0
+          sta SPRITE_MOVE_POS,x
+          rts
+          
+.HandlePause  
+          inc SPRITE_MOVE_POS,x
+          beq .NextState
+          rts
+
+
 ;------------------------------------------------------------
 ;simply walk left/right, don't fall off
 ;------------------------------------------------------------
@@ -4620,125 +4807,6 @@ GHOST_MOVE_SPEED = 1
 .MoveDone         
           rts
 
-;------------------------------------------------------------
-;jumping toad
-;------------------------------------------------------------
-!zone BehaviourJumpingToad
-BehaviourJumpingToad
-          lda SPRITE_HITBACK,x
-          beq .NoHitBack
-
-          dec SPRITE_HITBACK,x
-          lda SPRITE_HITBACK_DIRECTION,x
-          beq .HitBackRight
-          
-          ;move left
-          jsr ObjectMoveLeftBlocking
-          rts
-          
-.HitBackRight          
-          jsr ObjectMoveRightBlocking
-          rts
-          
-.NoHitBack          
-          lda SPRITE_STATE,x
-          beq .NotDucking
-          
-          inc SPRITE_ANIM_DELAY,x
-          lda SPRITE_ANIM_DELAY,x
-          cmp #6
-          bne .StillDucking
-          lda #0
-          sta SPRITE_ANIM_DELAY,x
-          
-          ldy SPRITE_ANIM_POS,x
-          inc SPRITE_ANIM_POS,x
-          lda TOAD_JUMP_ANIMATION_TABLE,y
-          sta SPRITE_POINTER_BASE,x
-          cmp #SPRITE_JUMPING_TOAD_1
-          bne .StillDucking
-          
-          ;start jump
-          lda #0
-          sta SPRITE_STATE,x
-          inc SPRITE_JUMP_POS,x
-          
-.StillDucking
-          rts
-          
-.NotDucking          
-          lda SPRITE_JUMP_POS,x
-          beq .FallIfPossible
-          
-          ;toad is jumping
-          lda SPRITE_JUMP_POS,x
-          cmp #TOAD_JUMP_TABLE_SIZE
-          bne .JumpOn
-          
-          ;jump done
-          jmp .JumpBlocked
-          
-.JumpOn          
-          ldy SPRITE_JUMP_POS,x
-          inc SPRITE_JUMP_POS,x
-          lda TOAD_JUMP_TABLE,y
-          bne .KeepJumping
-          
-          ;no jump movement needed
-          jmp .ToadMove
-          
-.KeepJumping          
-          sta PARAM5
-          
-.JumpContinue          
-          jsr ObjectMoveUpBlocking
-          beq .JumpBlocked
-          
-          dec PARAM5
-          bne .JumpContinue
-          jmp .ToadMove
-          
-.JumpBlocked
-          lda #0
-          sta SPRITE_JUMP_POS,x
-          jmp .ToadMove
-          
-.FallIfPossible          
-          jsr UpdateSpriteFall
-          beq .CanJump
-          jmp .ToadMove
- 
-.CanJump
-          inc SPRITE_STATE,x
-          lda #0
-          sta SPRITE_ANIM_DELAY,x
-          sta SPRITE_ANIM_POS,x
-          
-          lda #SPRITE_JUMPING_TOAD_2
-          sta SPRITE_POINTER_BASE,x
-          rts
- 
-          ;simple move left/right
-.ToadMove
-          lda SPRITE_DIRECTION,x
-          beq .MoveRight
-          
-          jsr ObjectMoveLeftBlocking
-          beq .ToggleDirection
-          rts
-          
-.MoveRight
-          jsr ObjectMoveRightBlocking
-          beq .ToggleDirection
-          rts
-          
-.ToggleDirection
-          lda SPRITE_DIRECTION,x
-          eor #1
-          sta SPRITE_DIRECTION,x
-          rts
- 
- 
           
  
 ;place the data at a valid bitmap position, this avoids copying the data        
@@ -4937,6 +5005,126 @@ SCREEN_BACK_LINE_OFFSET_TABLE_HI
 MUSIC_PLAYER
 !binary "gt2music.bin"
 
+
+;------------------------------------------------------------
+;jumping toad
+;------------------------------------------------------------
+!zone BehaviourJumpingToad
+BehaviourJumpingToad
+          lda SPRITE_HITBACK,x
+          beq .NoHitBack
+
+          dec SPRITE_HITBACK,x
+          lda SPRITE_HITBACK_DIRECTION,x
+          beq .HitBackRight
+          
+          ;move left
+          jsr ObjectMoveLeftBlocking
+          rts
+          
+.HitBackRight          
+          jsr ObjectMoveRightBlocking
+          rts
+          
+.NoHitBack          
+          lda SPRITE_STATE,x
+          beq .NotDucking
+          
+          inc SPRITE_ANIM_DELAY,x
+          lda SPRITE_ANIM_DELAY,x
+          cmp #6
+          bne .StillDucking
+          lda #0
+          sta SPRITE_ANIM_DELAY,x
+          
+          ldy SPRITE_ANIM_POS,x
+          inc SPRITE_ANIM_POS,x
+          lda TOAD_JUMP_ANIMATION_TABLE,y
+          sta SPRITE_POINTER_BASE,x
+          cmp #SPRITE_JUMPING_TOAD_1
+          bne .StillDucking
+          
+          ;start jump
+          lda #0
+          sta SPRITE_STATE,x
+          inc SPRITE_JUMP_POS,x
+          
+.StillDucking
+          rts
+          
+.NotDucking          
+          lda SPRITE_JUMP_POS,x
+          beq .FallIfPossible
+          
+          ;toad is jumping
+          lda SPRITE_JUMP_POS,x
+          cmp #TOAD_JUMP_TABLE_SIZE
+          bne .JumpOn
+          
+          ;jump done
+          jmp .JumpBlocked
+          
+.JumpOn          
+          ldy SPRITE_JUMP_POS,x
+          inc SPRITE_JUMP_POS,x
+          lda TOAD_JUMP_TABLE,y
+          bne .KeepJumping
+          
+          ;no jump movement needed
+          jmp .ToadMove
+          
+.KeepJumping          
+          sta PARAM5
+          
+.JumpContinue          
+          jsr ObjectMoveUpBlocking
+          beq .JumpBlocked
+          
+          dec PARAM5
+          bne .JumpContinue
+          jmp .ToadMove
+          
+.JumpBlocked
+          lda #0
+          sta SPRITE_JUMP_POS,x
+          jmp .ToadMove
+          
+.FallIfPossible          
+          jsr UpdateSpriteFall
+          beq .CanJump
+          jmp .ToadMove
+ 
+.CanJump
+          inc SPRITE_STATE,x
+          lda #0
+          sta SPRITE_ANIM_DELAY,x
+          sta SPRITE_ANIM_POS,x
+          
+          lda #SPRITE_JUMPING_TOAD_2
+          sta SPRITE_POINTER_BASE,x
+          rts
+ 
+          ;simple move left/right
+.ToadMove
+          lda SPRITE_DIRECTION,x
+          beq .MoveRight
+          
+          jsr ObjectMoveLeftBlocking
+          beq .ToggleDirection
+          rts
+          
+.MoveRight
+          jsr ObjectMoveRightBlocking
+          beq .ToggleDirection
+          rts
+          
+.ToggleDirection
+          lda SPRITE_DIRECTION,x
+          eor #1
+          sta SPRITE_DIRECTION,x
+          rts
+ 
+ 
 
 ;------------------------------------------------------------
 ;run left/right, jump off directional
@@ -6463,8 +6651,8 @@ UpdateSpriteFall
 ;------------------------------------------------------------
 !zone MoveSpriteLeft
 MoveSpriteLeft
-          dec SPRITE_POS_X,x
-          bpl .NoChangeInExtendedFlag
+          lda SPRITE_POS_X,x
+          bne .NoChangeInExtendedFlag
           
           lda BIT_TABLE,x
           eor #$ff
@@ -6473,6 +6661,7 @@ MoveSpriteLeft
           sta VIC_SPRITE_X_EXTEND
           
 .NoChangeInExtendedFlag     
+          dec SPRITE_POS_X,x
           txa
           asl
           tay
@@ -7895,7 +8084,7 @@ CopyCharSet
           ;set target address ($F000)
           lda #$00
           sta ZEROPAGE_POINTER_2
-          lda #$F0
+          lda #$F8
           sta ZEROPAGE_POINTER_2 + 1
 
           ldx #$00
@@ -7940,6 +8129,7 @@ CopyCharSet
 CopySprites
           ldy #$00
           ldx #$00
+          
           
           lda #00
           sta ZEROPAGE_POINTER_2
@@ -8357,6 +8547,11 @@ ENEMY_BEHAVIOUR_TABLE_LO
           !byte <BehaviourFrankenstein
           !byte <BehaviourHand
           !byte <BehaviourDevil
+          !byte <BehaviourImpala      ;impala 1
+          !byte <BehaviourImpala      ;impala 2
+          !byte <BehaviourImpala      ;impala 3
+          !byte <BehaviourImpala      ;impala driver
+          !byte <BehaviourImpalaDebris;impala debris
           
 ENEMY_BEHAVIOUR_TABLE_HI
           !byte >PlayerControl
@@ -8379,6 +8574,11 @@ ENEMY_BEHAVIOUR_TABLE_HI
           !byte >BehaviourFrankenstein
           !byte >BehaviourHand
           !byte >BehaviourDevil
+          !byte >BehaviourImpala      ;impala 1
+          !byte >BehaviourImpala      ;impala 2
+          !byte >BehaviourImpala      ;impala 3
+          !byte >BehaviourImpala      ;impala driver
+          !byte >BehaviourImpalaDebris;impala debris
           
 ;behaviour for an enemy being hit          
 ENEMY_HIT_BEHAVIOUR_TABLE_LO          
@@ -8401,6 +8601,11 @@ ENEMY_HIT_BEHAVIOUR_TABLE_LO
           !byte <HitBehaviourHurt     ;frankenstein
           !byte <HitBehaviourHurt     ;hand
           !byte <HitBehaviourHurt     ;devil
+          !byte <BehaviourNone        ;impala 1
+          !byte <BehaviourNone        ;impala 2
+          !byte <BehaviourNone        ;impala 3
+          !byte <BehaviourNone        ;impala driver
+          !byte <BehaviourNone        ;impala debris
           
 ENEMY_HIT_BEHAVIOUR_TABLE_HI
           !byte >HitBehaviourHurt     ;bat diagonal
@@ -8422,6 +8627,11 @@ ENEMY_HIT_BEHAVIOUR_TABLE_HI
           !byte >HitBehaviourHurt     ;frankenstein
           !byte >HitBehaviourHurt     ;hand
           !byte >HitBehaviourHurt     ;devil
+          !byte >BehaviourNone        ;impala 1
+          !byte >BehaviourNone        ;impala 2
+          !byte >BehaviourNone        ;impala 3
+          !byte >BehaviourNone        ;impala driver
+          !byte >BehaviourNone        ;impala debris
           
 IS_TYPE_ENEMY
           !byte 0     ;dummy entry for inactive object
@@ -8445,6 +8655,11 @@ IS_TYPE_ENEMY
           !byte 1     ;frankenstein
           !byte 1     ;hand
           !byte 1     ;devil
+          !byte 0     ;impala 1
+          !byte 0     ;impala 2
+          !byte 0     ;impala 3
+          !byte 0     ;impala driver
+          !byte 0     ;impala debris
           
 TYPE_START_SPRITE
           !byte 0     ;dummy entry for inactive object
@@ -8453,7 +8668,7 @@ TYPE_START_SPRITE
           !byte SPRITE_BAT_1
           !byte SPRITE_BAT_2
           !byte SPRITE_MUMMY_R_1
-          !byte SPRITE_ZOMBIE_WALK_R_1
+          !byte SPRITE_INVISIBLE        ;zombie
           !byte SPRITE_BAT_1
           !byte SPRITE_SPIDER_STAND
           !byte SPRITE_EXPLOSION_1
@@ -8468,6 +8683,11 @@ TYPE_START_SPRITE
           !byte SPRITE_INVISIBLE        ;frankie
           !byte SPRITE_INVISIBLE        ;hand
           !byte SPRITE_DEVIL_WALK_R_1   ;devil
+          !byte SPRITE_IMPALA_1
+          !byte SPRITE_IMPALA_2
+          !byte SPRITE_IMPALA_3
+          !byte SPRITE_DRIVERS
+          !byte SPRITE_DEBRIS_1
           
 TYPE_START_COLOR
           !byte 0
@@ -8491,6 +8711,11 @@ TYPE_START_COLOR
           !byte 10    ;frankenstein
           !byte 7     ;hand
           !byte 7     ;devil
+          !byte 0     ;impala 1
+          !byte 0     ;impala 2
+          !byte 0     ;impala 3
+          !byte 9     ;impala driver
+          !byte 9     ;impala debris
           
 TYPE_START_MULTICOLOR
           !byte 0     ;dummy
@@ -8514,6 +8739,11 @@ TYPE_START_MULTICOLOR
           !byte 1     ;frankenstein
           !byte 1     ;hand
           !byte 0     ;devil
+          !byte 1     ;impala 1
+          !byte 1     ;impala 2
+          !byte 1     ;impala 3
+          !byte 1     ;impala driver
+          !byte 0     ;impala debris
           
 TYPE_START_HP
           !byte 0     ;dummy
@@ -8537,6 +8767,11 @@ TYPE_START_HP
           !byte 7     ;frankenstein
           !byte 1     ;hand
           !byte 2     ;devil
+          !byte 0     ;impala 1
+          !byte 0     ;impala 2
+          !byte 0     ;impala 3
+          !byte 0     ;impala driver
+          !byte 0     ;impala debris
           
 TYPE_ANNOYED_COLOR
           !byte 0     ;dummy
@@ -8560,6 +8795,11 @@ TYPE_ANNOYED_COLOR
           !byte 13    ;frankenstein
           !byte 13    ;hand
           !byte 8     ;devil
+          !byte 0     ;impala 1
+          !byte 0     ;impala 2
+          !byte 0     ;impala 3
+          !byte 0     ;impala driver
+          !byte 0     ;impala debris
           
           
 ;enemy start direction, 2 bits per dir.
@@ -8599,6 +8839,11 @@ TYPE_START_DIRECTION
           !byte %00010010     ;frankenstein
           !byte %00010000     ;hand
           !byte %00010010     ;devil
+          !byte 0             ;impala 1
+          !byte 0             ;impala 2
+          !byte 0             ;impala 3
+          !byte 0             ;impala driver
+          !byte 0             ;impala debris
           
 TYPE_START_STATE
           !byte 0             ;dummy
@@ -8607,7 +8852,7 @@ TYPE_START_STATE
           !byte 0             ;bat up/ down
           !byte 0             ;bat 8
           !byte 0             ;mummy
-          !byte 0             ;zombie
+          !byte 131           ;zombie
           !byte 0             ;bat vanish
           !byte 0             ;spider
           !byte 0             ;explosion
@@ -8621,6 +8866,12 @@ TYPE_START_STATE
           !byte 0             ;slime
           !byte 128           ;frankenstein
           !byte 128           ;hand
+          !byte 0             ;devil
+          !byte 0             ;impala 1
+          !byte 0             ;impala 2
+          !byte 0             ;impala 3
+          !byte 0             ;impala driver
+          !byte 0             ;impala debris
           
 BAT_ANIMATION
           !byte SPRITE_BAT_1
@@ -8799,11 +9050,11 @@ BIT_TABLE
           !byte 1,2,4,8,16,32,64,128
           
 TEXT_DISPLAY_DEAN_ONLY
-          !text " SCORE: 00000000   ",224,224,"         LEVEL: 00                    ",225,225,"         LIVES: 03 *"
+          !text " SCORE",60," 00000000   ",224,224,"         LEVEL",60," 00                    ",225,225,"         LIVES",60," 03 *"
 TEXT_DISPLAY_SAM_ONLY
-          !text " SCORE: 00000000              LEVEL: 00  LIVES: 03                              *"
+          !text " SCORE",60," 00000000              LEVEL",60," 00  LIVES",60," 03                              *"
 TEXT_DISPLAY_DEAN_AND_SAM
-          !text " SCORE: 00000000   ",224,224,"         LEVEL: 00  LIVES: 03         ",225,225,"         LIVES: 03 *"
+          !text " SCORE",60," 00000000   ",224,224,"         LEVEL",60," 00  LIVES",60," 03         ",225,225,"         LIVES",60," 03 *"
 
 TEXT_GAME_MODE_LO
           !byte <TEXT_GAME_MODE_SINGLE_DEAN, <TEXT_GAME_MODE_SINGLE_SAM, <TEXT_GAME_MODE_COOP
@@ -8825,6 +9076,13 @@ TEXT_ENTER_NAME
 TEXT_GET_READY
           !text 226,228,230,0,232,228,234,235,237,231,"-"
           !text 227,229,231,0,233,229,233,236,231,238,"*"
+          
+TEXT_STORY_1
+          !text "A LOCAL NEWSPAPER MENTIONS SEVERAL-"
+          !text "MISSING PEOPLE",59," THIS SEEMS TO BE A-"
+          !text "RECURRING PATTERN EVERY 44 YEARS",59,"-"
+          !text "WE SHOULD INVESTIGATE THE TOWN-"
+          !text "CEMETARY",59,"*"
           
 COLOR_FADE_POS
           !byte 0
@@ -8885,6 +9143,7 @@ GAME_MODE
 ;------------------------------------------------------------
 SCREEN_DATA_TABLE
           !word SN_LEVEL_1
+          !word SN_LEVEL_2
           !word LEVEL_1
           !word LEVEL_2
           !word LEVEL_3
