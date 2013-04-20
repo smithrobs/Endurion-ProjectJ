@@ -247,6 +247,9 @@ SPRITE_DRIVERS                = SPRITE_BASE + 131
 SPRITE_DEBRIS_1               = SPRITE_BASE + 132
 SPRITE_DEBRIS_2               = SPRITE_BASE + 133
 
+SPRITE_SPAWN_1                = SPRITE_BASE + 134
+SPRITE_SPAWN_2                = SPRITE_BASE + 135
+
 ;offset from calculated char pos to true sprite pos
 SPRITE_CENTER_OFFSET_X  = 8
 SPRITE_CENTER_OFFSET_Y  = 11
@@ -306,7 +309,7 @@ TYPE_IMPALA_2           = 22
 TYPE_IMPALA_3           = 23
 TYPE_IMPALA_DRIVER      = 24
 TYPE_IMPALA_DEBRIS      = 25
-TYPE_WOLFMAN_2P         = 26
+TYPE_SPAWN              = 26
 
 OBJECT_HEIGHT           = 8 * 2
 
@@ -1245,7 +1248,7 @@ ProcessSpawnSpots
           
           stx PARAM4
           lda SPAWN_SPOT_TYPE,x
-          sta PARAM3
+          sta PARAM5
           lda SPAWN_SPOT_X,x
           sta PARAM1
           lda SPAWN_SPOT_Y,x
@@ -1259,7 +1262,15 @@ ProcessSpawnSpots
           ;PARAM1 is X
           ;PARAM2 is Y
           ;PARAM3 is object type
+          stx PARAM7
+          lda #TYPE_SPAWN
+          sta PARAM3
           jsr SpawnObject
+          
+          ;store spawn type in SPRITE_ANNOYED
+          ldx PARAM7
+          lda PARAM5
+          sta SPRITE_ANNOYED,x
           
           ;restore x
           ldx PARAM4
@@ -6466,6 +6477,44 @@ BehaviourEye
  
  
 ;------------------------------------------------------------
+;Spawn
+;------------------------------------------------------------
+!zone BehaviourSpawn
+BehaviourSpawn
+          inc SPRITE_ANIM_DELAY,x
+          lda SPRITE_ANIM_DELAY,x
+          cmp #3
+          beq .UpdateAnimation
+          rts
+          
+.UpdateAnimation          
+          lda #0
+          sta SPRITE_ANIM_DELAY,x
+          
+          lda SPRITE_POINTER_BASE,x
+          eor #$01
+          sta SPRITE_POINTER_BASE,x
+          
+          inc SPRITE_MOVE_POS,x
+          lda SPRITE_MOVE_POS,x
+          cmp #20
+          beq .SpawnNow
+          rts
+          
+.SpawnNow
+          lda SPRITE_ANNOYED,x
+          sta PARAM3
+          lda SPRITE_CHAR_POS_X,x
+          sta PARAM1
+          lda SPRITE_CHAR_POS_Y,x
+          sta PARAM2
+          stx PARAM7
+          lda #1
+          jsr SpawnObject
+          ldx PARAM7
+          rts
+ 
+;------------------------------------------------------------
 ;explosion
 ;------------------------------------------------------------
 !zone BehaviourExplosion
@@ -7171,6 +7220,7 @@ LevelObject
 ;PARAM1 is X
 ;PARAM2 is Y
 ;PARAM3 is object type
+;expects #1 in A to add object, #0 does not add
 ;------------------------------------------------------------
 !zone SpawnObject
 SpawnObject
@@ -8746,7 +8796,7 @@ ENEMY_BEHAVIOUR_TABLE_LO
           !byte <BehaviourImpala      ;impala 3
           !byte <BehaviourImpala      ;impala driver
           !byte <BehaviourImpalaDebris;impala debris
-          !byte <BehaviourWolf
+          !byte <BehaviourSpawn
           
 ENEMY_BEHAVIOUR_TABLE_HI
           !byte >PlayerControl
@@ -8774,7 +8824,7 @@ ENEMY_BEHAVIOUR_TABLE_HI
           !byte >BehaviourImpala      ;impala 3
           !byte >BehaviourImpala      ;impala driver
           !byte >BehaviourImpalaDebris;impala debris
-          !byte >BehaviourWolf
+          !byte >BehaviourSpawn
           
 ;behaviour for an enemy being hit          
 ENEMY_HIT_BEHAVIOUR_TABLE_LO          
@@ -8802,7 +8852,7 @@ ENEMY_HIT_BEHAVIOUR_TABLE_LO
           !byte <BehaviourNone        ;impala 3
           !byte <BehaviourNone        ;impala driver
           !byte <BehaviourNone        ;impala debris
-          !byte <HitBehaviourHurt     ;wolf 2p
+          !byte <BehaviourNone        ;spawn
           
           
 ENEMY_HIT_BEHAVIOUR_TABLE_HI
@@ -8830,7 +8880,7 @@ ENEMY_HIT_BEHAVIOUR_TABLE_HI
           !byte >BehaviourNone        ;impala 3
           !byte >BehaviourNone        ;impala driver
           !byte >BehaviourNone        ;impala debris
-          !byte >HitBehaviourHurt     ;wolf 2p
+          !byte >BehaviourNone        ;spawn
           
 IS_TYPE_ENEMY
           !byte 0     ;dummy entry for inactive object
@@ -8859,7 +8909,7 @@ IS_TYPE_ENEMY
           !byte 0     ;impala 3
           !byte 0     ;impala driver
           !byte 0     ;impala debris
-          !byte 1     ;wolf 2p
+          !byte 0     ;spawn
           
 TYPE_START_SPRITE
           !byte 0     ;dummy entry for inactive object
@@ -8888,7 +8938,7 @@ TYPE_START_SPRITE
           !byte SPRITE_IMPALA_3
           !byte SPRITE_DRIVERS
           !byte SPRITE_DEBRIS_1
-          !byte SPRITE_WOLF_WALK_R_1    ;wolfman 2x
+          !byte SPRITE_SPAWN_1
           
 TYPE_START_COLOR
           !byte 0
@@ -8917,7 +8967,7 @@ TYPE_START_COLOR
           !byte 0     ;impala 3
           !byte 9     ;impala driver
           !byte 9     ;impala debris
-          !byte 14    ;wolf 2p
+          !byte 12    ;spawn
           
 TYPE_START_MULTICOLOR
           !byte 0     ;dummy
@@ -8946,7 +8996,7 @@ TYPE_START_MULTICOLOR
           !byte 1     ;impala 3
           !byte 1     ;impala driver
           !byte 0     ;impala debris
-          !byte 1     ;wolf 2p
+          !byte 0     ;spawn
           
 TYPE_START_HP
           !byte 0     ;dummy
@@ -8975,7 +9025,7 @@ TYPE_START_HP
           !byte 0     ;impala 3
           !byte 0     ;impala driver
           !byte 0     ;impala debris
-          !byte 3     ;wolf 2p
+          !byte 0     ;spawn
           
 TYPE_ANNOYED_COLOR
           !byte 0     ;dummy
@@ -9004,7 +9054,7 @@ TYPE_ANNOYED_COLOR
           !byte 0     ;impala 3
           !byte 0     ;impala driver
           !byte 0     ;impala debris
-          !byte 10    ;wolf 2p
+          !byte 7     ;spawn
           
           
 ;enemy start direction, 2 bits per dir.
@@ -9049,7 +9099,7 @@ TYPE_START_DIRECTION
           !byte 0             ;impala 3
           !byte 0             ;impala driver
           !byte 0             ;impala debris
-          !byte %00000010     ;wolf 2p
+          !byte 0             ;spawn
           
 TYPE_START_STATE
           !byte 0             ;dummy
@@ -9078,7 +9128,7 @@ TYPE_START_STATE
           !byte 0             ;impala 3
           !byte 0             ;impala driver
           !byte 0             ;impala debris
-          !byte 0             ;wolf 2p
+          !byte 128           ;spawn
           
 TYPE_START_DELTA_Y
           !byte 0     ;dummy
@@ -9107,7 +9157,7 @@ TYPE_START_DELTA_Y
           !byte 0     ;impala 3
           !byte 0     ;impala driver
           !byte 0     ;impala debris
-          !byte 2     ;wolf 2p
+          !byte 0     ;spawn
           
 BAT_ANIMATION
           !byte SPRITE_BAT_1
