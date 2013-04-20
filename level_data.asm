@@ -447,9 +447,10 @@ SN_SCREEN_DATA_TABLE
           !word SN_LEVEL_67
           !word SN_LEVEL_68
           !word SN_LEVEL_69
-          ;!word SN_LEVEL_70
-          !word SN_LEVEL_71
+          !word SN_LEVEL_70
+          ;!word SN_LEVEL_71
           !word SN_LEVEL_72
+          !word SN_LEVEL_73
           !word 0
 
 
@@ -2384,6 +2385,40 @@ SN_LEVEL_69
           !byte LD_SPAWN_SPOT,28,14,TYPE_WOLFMAN,33
           !byte LD_END
 SN_LEVEL_70
+          !byte LD_LEVEL_CONFIG,7
+          !byte LD_AREA,8,2,24,19,93,6
+          !byte LD_LINE_H,8,1,24,92,6
+          !byte LD_ELEMENT,6,15,EL_SN_SLIME_STONE_4
+          !byte LD_ELEMENT_LINE_H,6,0,7,EL_SN_BLUEROCK
+          !byte LD_ELEMENT_LINE_H,6,21,7,EL_SN_BLUEROCK
+          !byte LD_ELEMENT_LINE_V,6,2,19,EL_SN_METAL.COLUMN.L.CENTER
+          !byte LD_ELEMENT,6,1,EL_SN_METAL.COLUMN.L.TOP
+          !byte LD_ELEMENT,30,15,EL_SN_SLIME_STONE_4
+          !byte LD_ELEMENT,18,137
+          !byte LD_ELEMENT,6,6,EL_SN_METAL.COLUMN.L.HOLE
+          !byte LD_ELEMENT,6,141
+          !byte LD_ELEMENT_LINE_V,32,2,19,EL_SN_METAL.COLUMN.R.CENTER
+          !byte LD_ELEMENT,32,1,EL_SN_METAL.COLUMN.R.TOP
+          !byte LD_ELEMENT,32,6,EL_SN_METAL.COLUMN.R.BOTTOM
+          !byte LD_ELEMENT,32,141
+          !byte LD_ELEMENT_LINE_V,16,11,2,EL_SN_METAL.DOOR.L
+          !byte LD_ELEMENT_LINE_V,20,11,2,EL_SN_METAL.DOOR.L
+          !byte LD_ELEMENT_LINE_V,18,11,2,EL_SN_METAL.DOOR.R
+          !byte LD_ELEMENT_LINE_V,22,11,2,EL_SN_METAL.DOOR.R
+          !byte LD_ELEMENT,12,18,EL_SN_SLIME_STONE_4
+          !byte LD_ELEMENT,24,146
+          !byte LD_ELEMENT,24,140
+          !byte LD_ELEMENT,12,140
+          !byte LD_OBJECT,9,20,TYPE_PLAYER_DEAN
+          !byte LD_OBJECT,30,20,TYPE_PLAYER_SAM
+          !byte LD_SPAWN_SPOT,13,17,TYPE_WOLFMAN,2
+          !byte LD_SPAWN_SPOT,26,17,TYPE_WOLFMAN,2
+          !byte LD_SPAWN_SPOT,19,7,TYPE_GHOST_SKELETON,17
+          !byte LD_SPAWN_SPOT,14,11,TYPE_SPIDER,34
+          !byte LD_SPAWN_SPOT,25,11,TYPE_SPIDER,34
+          !byte LD_SPAWN_SPOT,20,17,TYPE_GHOST_SKELETON,49
+          !byte LD_END
+SN_LEVEL_71
           !byte LD_LEVEL_CONFIG,11
           !byte LD_ELEMENT_AREA,13,1,7,5,EL_SN_RED_ROCK_BACKGROUND
           !byte LD_ELEMENT_AREA,3,5,7,4,EL_SN_RED_ROCK_BACKGROUND
@@ -2413,7 +2448,7 @@ SN_LEVEL_70
           !byte LD_ELEMENT,31,143
           !byte LD_ELEMENT,5,143
           !byte LD_END
-SN_LEVEL_71
+SN_LEVEL_72
           !byte LD_LINE_H_ALT,1,20,38,160,13
           !byte LD_LINE_H_ALT,1,11,4,160,13
           !byte LD_LINE_H_ALT,1,14,4,160,13
@@ -2429,7 +2464,7 @@ SN_LEVEL_71
           !byte LD_LINE_H_ALT,1,5,4,160,13
           !byte LD_LINE_H_ALT,35,5,4,160,13
           !byte LD_END
-SN_LEVEL_72
+SN_LEVEL_73
           !byte LD_LEVEL_CONFIG,2
           !byte LD_ELEMENT,6,16,EL_SN_REDROCK
           !byte LD_OBJECT,8,15,TYPE_PLAYER_DEAN
