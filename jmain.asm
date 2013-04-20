@@ -5816,10 +5816,29 @@ BehaviourZombie
           
           
 .WakeUp1
-          lda #SPRITE_ZOMBIE_COLLAPSE_R_1
+          ;only animate head to warn player
+          inc SPRITE_MOVE_POS,x
+          lda SPRITE_MOVE_POS,x
+          cmp #20
+          beq .ReallyWakeUp
+          
+          and #$07
+          bne ++
+          
+          ;show head
+          lda SPRITE_DIRECTION,x
+          eor #1
+          sta SPRITE_DIRECTION,x
+          
+          lda #SPRITE_ZOMBIE_COLLAPSE_R_2
           clc
           adc SPRITE_DIRECTION,x
           sta SPRITE_POINTER_BASE,x
+++          
+          rts
+          
+          
+.ReallyWakeUp          
           inc SPRITE_STATE,x
           rts
           
@@ -14102,7 +14121,7 @@ TYPE_START_STATE
           !byte 0             ;bat up/ down
           !byte 0             ;bat 8
           !byte 0             ;mummy
-          !byte 131           ;zombie
+          !byte 0             ;zombie
           !byte 0             ;bat vanish
           !byte 0             ;spider
           !byte 0             ;explosion
