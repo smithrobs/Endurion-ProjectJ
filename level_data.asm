@@ -449,7 +449,7 @@ SN_SCREEN_DATA_TABLE
           !word SN_LEVEL_69
           !word SN_LEVEL_70
           !word SN_LEVEL_71
-          ;!word SN_LEVEL_72
+          !word SN_LEVEL_72
           !word SN_LEVEL_73
           !word SN_LEVEL_74
           !word 0

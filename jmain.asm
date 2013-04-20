@@ -49,7 +49,7 @@ CIA_PRA                 = $dd00
 PROCESSOR_PORT          = $01
 
 ;START_LEVEL             = 0
-START_LEVEL             = 70
+START_LEVEL             = 71
 
 MUSIC_IN_GAME_TUNE		    = $00
 MUSIC_TITLE_TUNE			     = $01
@@ -1700,9 +1700,16 @@ HandleFinalBossIntro
           sta VIC_BACKGROUND_COLOR
           rts
           
-.SpawnBoss          
+.SpawnBoss
+          ;disable intro flag
+          lda LEVEL_CONFIG
+          and #$f7
+          sta LEVEL_CONFIG
           
           ;spawn boss
+          lda #0
+          sta BOSS_PARTS_KILLED
+          
           lda #19
           sta PARAM1
           lda #6
@@ -1712,6 +1719,26 @@ HandleFinalBossIntro
           jsr FindEmptySpriteSlot
           jsr SpawnObject
           stx PARAM10
+
+          ;torso
+          lda #19
+          sta PARAM1
+          lda #10
+          sta PARAM2
+          lda #TYPE_BOSS5
+          sta PARAM3
+          jsr FindEmptySpriteSlot
+          jsr SpawnObject
+          lda #TYPE_BOSS_PART
+          sta SPRITE_ACTIVE,x
+          lda #128
+          sta SPRITE_STATE,x
+          jsr MoveSpriteUp
+          jsr MoveSpriteUp
+          lda PARAM10
+          sta SPRITE_VALUE,x
+          lda #2
+          sta VIC_SPRITE_COLOR,x
 
           ;left arm
           lda #17
@@ -1724,6 +1751,8 @@ HandleFinalBossIntro
           jsr SpawnObject
           lda #TYPE_BOSS_PART
           sta SPRITE_ACTIVE,x
+          lda #0
+          sta SPRITE_STATE,x
           lda PARAM10
           sta SPRITE_VALUE,x
           lda #2
@@ -1740,24 +1769,8 @@ HandleFinalBossIntro
           jsr SpawnObject
           lda #TYPE_BOSS_PART
           sta SPRITE_ACTIVE,x
-          lda PARAM10
-          sta SPRITE_VALUE,x
-          lda #2
-          sta VIC_SPRITE_COLOR,x
-
-          ;torso
-          lda #19
-          sta PARAM1
-          lda #10
-          sta PARAM2
-          lda #TYPE_BOSS5
-          sta PARAM3
-          jsr FindEmptySpriteSlot
-          jsr SpawnObject
-          lda #TYPE_BOSS_PART
-          sta SPRITE_ACTIVE,x
-          jsr MoveSpriteUp
-          jsr MoveSpriteUp
+          lda #0
+          sta SPRITE_STATE,x
           lda PARAM10
           sta SPRITE_VALUE,x
           lda #2
@@ -1774,6 +1787,8 @@ HandleFinalBossIntro
           jsr SpawnObject
           lda #TYPE_BOSS_PART
           sta SPRITE_ACTIVE,x
+          lda #0
+          sta SPRITE_STATE,x
           lda PARAM10
           sta SPRITE_VALUE,x
           lda #2
@@ -1790,6 +1805,8 @@ HandleFinalBossIntro
           jsr SpawnObject
           lda #TYPE_BOSS_PART
           sta SPRITE_ACTIVE,x
+          lda #0
+          sta SPRITE_STATE,x
           lda PARAM10
           sta SPRITE_VALUE,x
           lda #2
@@ -2907,11 +2924,8 @@ PlayerControl
           dex
 
           jsr KillEnemy
-          
-          lda #0
-          sta SPRITE_HELD
-          
           jsr RemoveForceBeam
+          
           ldx PARAM6
           jmp .NotFirePushed
           
@@ -3618,6 +3632,46 @@ KillEnemy
 +
 
 .NoEnemy          
+          cpy #TYPE_BOSS_PART
+          bne ++
+          
+          inc BOSS_PARTS_KILLED
+          lda BOSS_PARTS_KILLED
+          cmp #5
+          beq .MakeBossHeadVulnerable
+          cmp #4
+          bne ++
+          
+          ;make boss torso vulnerable
+          ldy #1
+          
+-          
+          lda SPRITE_ACTIVE,y
+          cmp #TYPE_BOSS_PART
+          beq +
+          
+          iny
+          bne -
+          
++          
+          lda #0
+          sta SPRITE_STATE,y
+          jmp ++
+          
+.MakeBossHeadVulnerable          
+          ldy #1
+          
+-          
+          lda SPRITE_ACTIVE,y
+          cmp #TYPE_BOSS7
+          beq +
+          iny
+          bne -
+          
++          
+          lda #0
+          sta SPRITE_STATE,y
+++
           lda #TYPE_EXPLOSION
           sta SPRITE_ACTIVE,x
           
@@ -4039,6 +4093,10 @@ ObjectMoveLeftBlocking
           rts
           
 .CheckCanMoveLeft
+          lda SPRITE_CHAR_POS_X,x
+          cmp MOVE_BORDER_LEFT
+          beq .BlockedLeft
+
           lda SPRITE_CHAR_POS_Y_DELTA,x
           beq .NoThirdCharCheckNeeded
           
@@ -4237,6 +4295,10 @@ ObjectMoveRightBlocking
           rts
           
 .CheckCanMoveRight
+          lda SPRITE_CHAR_POS_X,x
+          cmp MOVE_BORDER_RIGHT
+          beq .BlockedRight
+          
           lda SPRITE_CHAR_POS_Y_DELTA,x
           beq .NoThirdCharCheckNeeded
           
@@ -4624,6 +4686,10 @@ ObjectMoveUpBlocking
           rts
           
 .CheckCanMoveUp
+          lda SPRITE_CHAR_POS_Y,x
+          cmp MOVE_BORDER_TOP
+          beq .BlockedUp
+
           lda SPRITE_CHAR_POS_X_DELTA,x
           beq .NoSecondCharCheckNeeded
           
@@ -4716,6 +4782,10 @@ ObjectMoveDownBlocking
           rts
           
 .CheckCanMoveDown
+          lda SPRITE_CHAR_POS_Y,x
+          cmp MOVE_BORDER_BOTTOM
+          beq .BlockedDown
+
           lda SPRITE_CHAR_POS_X_DELTA,x
           beq .NoSecondCharCheckNeeded
           
@@ -4754,97 +4824,6 @@ ObjectMoveDownBlocking
 .BlockedDown
           lda #0
           rts
-          
-
-;------------------------------------------------------------
-;move object down if not blocked
-;x = object index
-;------------------------------------------------------------
-!zone ObjectMoveDownBlockingNoPlatform
-ObjectMoveDownBlockingNoPlatform
-          
-          lda SPRITE_CHAR_POS_Y_DELTA,x
-          beq .CheckCanMoveDown
-          
-.CanMoveDown
-          inc SPRITE_CHAR_POS_Y_DELTA,x
-          
-          lda SPRITE_CHAR_POS_Y_DELTA,x
-          cmp #8
-          bne .NoCharStep
-          
-          lda #0
-          sta SPRITE_CHAR_POS_Y_DELTA,x
-          inc SPRITE_CHAR_POS_Y,x
-          
-.NoCharStep          
-          jsr MoveSpriteDown
-          lda #1
-          rts
-          
-.CheckCanMoveDown
-          lda SPRITE_CHAR_POS_X_DELTA,x
-          beq .NoSecondCharCheckNeeded
-          
-          ldy SPRITE_CHAR_POS_Y,x
-          iny
-          lda SCREEN_LINE_OFFSET_TABLE_LO,y
-          sta ZEROPAGE_POINTER_1
-          lda SCREEN_BACK_LINE_OFFSET_TABLE_HI,y
-          sta ZEROPAGE_POINTER_1 + 1
-
-          ldy SPRITE_CHAR_POS_X,x
-          iny
-          lda (ZEROPAGE_POINTER_1),y
-          
-          jsr IsCharBlocking
-          bne .BlockedDown
-          
-.NoSecondCharCheckNeeded          
-
-          ldy SPRITE_CHAR_POS_Y,x
-          iny
-          lda SCREEN_LINE_OFFSET_TABLE_LO,y
-          sta ZEROPAGE_POINTER_1
-          lda SCREEN_BACK_LINE_OFFSET_TABLE_HI,y
-          sta ZEROPAGE_POINTER_1 + 1
-          
-          ldy SPRITE_CHAR_POS_X,x
-          
-          lda (ZEROPAGE_POINTER_1),y
-          
-          jsr IsCharBlocking
-          bne .BlockedDown
-          
-          jmp .CanMoveDown
-          
-.BlockedDown
-          lda #0
-          rts
-          
-
-;------------------------------------------------------------
-;move object down
-;x = object index
-;------------------------------------------------------------
-!zone ObjectMoveDown
-ObjectMoveDown
-          
-          inc SPRITE_CHAR_POS_Y_DELTA,x
-          
-          lda SPRITE_CHAR_POS_Y_DELTA,x
-          cmp #8
-          bne .NoCharStep
-          
-          lda #0
-          sta SPRITE_CHAR_POS_Y_DELTA,x
-          inc SPRITE_CHAR_POS_Y,x
-          
-.NoCharStep          
-          jsr MoveSpriteDown
-          rts
-
-
           
 
 
@@ -5101,6 +5080,102 @@ MUSIC_PLAYER
 
 
 ;------------------------------------------------------------
+;move object down if not blocked
+;x = object index
+;------------------------------------------------------------
+!zone ObjectMoveDownBlockingNoPlatform
+ObjectMoveDownBlockingNoPlatform
+          
+          lda SPRITE_CHAR_POS_Y_DELTA,x
+          beq .CheckCanMoveDown
+          
+.CanMoveDown
+          inc SPRITE_CHAR_POS_Y_DELTA,x
+          
+          lda SPRITE_CHAR_POS_Y_DELTA,x
+          cmp #8
+          bne .NoCharStep
+          
+          lda #0
+          sta SPRITE_CHAR_POS_Y_DELTA,x
+          inc SPRITE_CHAR_POS_Y,x
+          
+.NoCharStep          
+          jsr MoveSpriteDown
+          lda #1
+          rts
+          
+.CheckCanMoveDown
+          lda SPRITE_CHAR_POS_Y
+          cmp MOVE_BORDER_BOTTOM
+          beq .BlockedDown
+          
+          lda SPRITE_CHAR_POS_X_DELTA,x
+          beq .NoSecondCharCheckNeeded
+          
+          ldy SPRITE_CHAR_POS_Y,x
+          iny
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          lda SCREEN_BACK_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+
+          ldy SPRITE_CHAR_POS_X,x
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          
+          jsr IsCharBlocking
+          bne .BlockedDown
+          
+.NoSecondCharCheckNeeded          
+
+          ldy SPRITE_CHAR_POS_Y,x
+          iny
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          lda SCREEN_BACK_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+          
+          ldy SPRITE_CHAR_POS_X,x
+          
+          lda (ZEROPAGE_POINTER_1),y
+          
+          jsr IsCharBlocking
+          bne .BlockedDown
+          
+          jmp .CanMoveDown
+          
+.BlockedDown
+          lda #0
+          rts
+          
+
+;------------------------------------------------------------
+;move object down
+;x = object index
+;------------------------------------------------------------
+!zone ObjectMoveDown
+ObjectMoveDown
+          
+          inc SPRITE_CHAR_POS_Y_DELTA,x
+          
+          lda SPRITE_CHAR_POS_Y_DELTA,x
+          cmp #8
+          bne .NoCharStep
+          
+          lda #0
+          sta SPRITE_CHAR_POS_Y_DELTA,x
+          inc SPRITE_CHAR_POS_Y,x
+          
+.NoCharStep          
+          jsr MoveSpriteDown
+          rts
+
+
+          
+
+
+;------------------------------------------------------------
 ;Enemy Behaviour
 ;------------------------------------------------------------
 !zone ObjectControl
@@ -5169,6 +5244,14 @@ BehaviourNone
 
 !zone HitBehaviourBossHelper
 HitBehaviourBossHelper
+          lda #8
+          sta SPRITE_HITBACK,x
+
+          inc SPRITE_ANNOYED,x
+          
+          ldy SPRITE_ACTIVE,x
+          lda TYPE_ANNOYED_COLOR,y
+          sta VIC_SPRITE_COLOR,x
           rts
 
 
@@ -7629,6 +7712,58 @@ CheckIsPlayerCollidingWithBeam
           rts
 
 
+;------------------------------------------------------------
+;check player vs. beam H
+; YPos in PARAM3
+; player index in y
+;------------------------------------------------------------
+!zone CheckIsPlayerCollidingWithYPosH
+CheckIsPlayerCollidingWithYPosH
+          lda SPRITE_ACTIVE,y
+          bne .PlayerIsActive
+.PlayerNotActive          
+          rts
+          
+.PlayerIsActive          
+          cmp #TYPE_PLAYER_DEAN
+          beq +
+          cmp #TYPE_PLAYER_SAM
+          beq +
+          rts
+          
++          
+          lda SPRITE_STATE,y
+          cmp #128
+          bcs .PlayerNotActive
+          
+          lda SPRITE_CHAR_POS_X,y
+          cmp PARAM1
+          bcc .PlayerNotActive
+          cmp PARAM2
+          bcs .PlayerNotActive
+          
+          ;compare char positions in y
+          lda PARAM3
+          cmp SPRITE_CHAR_POS_Y,y
+          beq .PlayerHit
+          
+          clc
+          adc #1
+          cmp SPRITE_CHAR_POS_Y,y
+          beq .PlayerHit
+          
+          sec
+          sbc #2
+          cmp SPRITE_CHAR_POS_Y,y
+          beq .PlayerHit
+          
+          ;not hit
+          rts
+          
+.PlayerHit          
+          ;player killed
+          jmp KillPlayer
+
 ;kills player (index y)
 !zone KillPlayer
 KillPlayer
@@ -7776,6 +7911,136 @@ CheckIsPlayerCollidingWithDiagonalBeam
           jsr KillPlayer
           rts
 
+
+
+;------------------------------------------------------------
+;check player vs. diagonal beam
+; X start in PARAM1
+; Y start in PARAM2
+; player index in y
+;------------------------------------------------------------
+!zone CheckIsPlayerCollidingWithDiagonalLLUR
+CheckIsPlayerCollidingWithDiagonalLLUR
+          lda SPRITE_ACTIVE,y
+          bne .PlayerIsActive
+.PlayerNotActive          
+          rts
+          
+.PlayerIsActive          
+          lda SPRITE_STATE,y
+          cmp #128
+          bcs .PlayerNotActive
+          
+          ;compare char positions in x
+          lda PARAM1
+          sec
+          sbc SPRITE_CHAR_POS_X,y
+          bpl .PositiveX
+          
+          ;player is to the right
+          rts
+.PositiveX
+          sta PARAM3
+          
+          lda PARAM2
+          sec
+          sbc SPRITE_CHAR_POS_Y,y
+          bpl .PositiveY
+          
+          lda SPRITE_CHAR_POS_Y,y
+          sec
+          sbc PARAM2
+.PositiveY
+          sta PARAM4
+          
+          lda PARAM3
+          cmp PARAM4
+          beq .PlayerHit
+          
+          lda PARAM3
+          sec
+          sbc PARAM4
+          bpl .PositiveDelta
+          lda PARAM4
+          sec
+          sbc PARAM3
+.PositiveDelta          
+          cmp #1
+          beq .PlayerHit
+          
+          
+          ;not hit
+          rts
+          
+.PlayerHit          
+          ;player killed
+          jmp KillPlayer
+
+
+
+;------------------------------------------------------------
+;check player vs. diagonal beam
+; X start in PARAM1
+; Y start in PARAM2
+; player index in y
+;------------------------------------------------------------
+!zone CheckIsPlayerCollidingWithDiagonalULLR
+CheckIsPlayerCollidingWithDiagonalULLR
+          lda SPRITE_ACTIVE,y
+          bne .PlayerIsActive
+.PlayerNotActive          
+          rts
+          
+.PlayerIsActive          
+          lda SPRITE_STATE,y
+          cmp #128
+          bcs .PlayerNotActive
+          
+          ;compare char positions in x
+          lda PARAM1
+          sec
+          sbc SPRITE_CHAR_POS_X,y
+          bpl .PlayerNotActive
+          
+          ;player is to the right
+          lda SPRITE_CHAR_POS_X,y
+          sec
+          sbc PARAM1
+          sta PARAM3
+          
+          lda PARAM2
+          sec
+          sbc SPRITE_CHAR_POS_Y,y
+          bpl .PositiveY
+          
+          lda SPRITE_CHAR_POS_Y,y
+          sec
+          sbc PARAM2
+.PositiveY
+          sta PARAM4
+          
+          lda PARAM3
+          cmp PARAM4
+          beq .PlayerHit
+          
+          lda PARAM3
+          sec
+          sbc PARAM4
+          bpl .PositiveDelta
+          lda PARAM4
+          sec
+          sbc PARAM3
+.PositiveDelta          
+          cmp #1
+          beq .PlayerHit
+          
+          
+          ;not hit
+          rts
+          
+.PlayerHit          
+          ;player killed
+          jmp KillPlayer
 
 
 ;------------------------------------------------------------
@@ -9749,15 +10014,15 @@ BOSS_MOVE_SPEED = 1
 
 ;------------------------------------------------------------
 ;boss #7
-;state = 0 -> random movements
-;state = 1 -> attack with beams
+;state = 128 -> random movements
+;state = 129 -> attack with beams
 ;------------------------------------------------------------
 !zone BehaviourBoss7
 BehaviourBoss7
 BOSS_MOVE_SPEED = 1
           lda SPRITE_STATE,x
           beq .RandomMovements
-          cmp #1
+          cmp #129
           bne +
           jmp .AttackWithBeams
 
@@ -9767,7 +10032,7 @@ BOSS_MOVE_SPEED = 1
           inc SPRITE_MODE_POS,x
           bne +
           ;attack mode
-          lda #1
+          lda #129
           sta SPRITE_STATE,x
           rts
 
@@ -9790,6 +10055,15 @@ BOSS_MOVE_SPEED = 1
 .DoMove
           dec SPRITE_MOVE_POS,x
           
+          lda #12
+          sta MOVE_BORDER_LEFT
+          lda #39 - 12
+          sta MOVE_BORDER_RIGHT
+          lda #4
+          sta MOVE_BORDER_TOP
+          lda #12
+          sta MOVE_BORDER_BOTTOM
+          
           lda SPRITE_DIRECTION,x
           beq ++
           jsr ObjectMoveLeftBlocking
@@ -9800,7 +10074,7 @@ BOSS_MOVE_SPEED = 1
           sta PARAM10
 -          
           inx
-          jsr MoveSpriteLeft
+          jsr ObjectMoveLeft
           dec PARAM10
           bne -
           
@@ -9814,7 +10088,7 @@ BOSS_MOVE_SPEED = 1
           sta PARAM10
 -          
           inx
-          jsr MoveSpriteRight
+          jsr ObjectMoveRight
           dec PARAM10
           bne -
           
@@ -9830,7 +10104,7 @@ BOSS_MOVE_SPEED = 1
           sta PARAM10
 -          
           inx
-          jsr MoveSpriteUp
+          jsr ObjectMoveUp
           dec PARAM10
           bne -
           jmp .DoMoveDone
@@ -9843,10 +10117,18 @@ BOSS_MOVE_SPEED = 1
           sta PARAM10
 -          
           inx
-          jsr MoveSpriteDown
+          jsr ObjectMoveDown
           dec PARAM10
           bne -
 .DoMoveDone          
+
+          lda #0
+          sta MOVE_BORDER_LEFT
+          sta MOVE_BORDER_TOP
+          lda #39
+          sta MOVE_BORDER_RIGHT
+          lda #23
+          sta MOVE_BORDER_BOTTOM
           rts
 
 
@@ -9862,16 +10144,93 @@ BOSS_MOVE_SPEED = 1
           inc SPRITE_MODE_POS,x
           
           lda SPRITE_MODE_POS,x
-          cmp #11
-          bcc .BeamNotDangerous
-          cmp #29
-          bcs .BeamNotDangerous
+          cmp #5
+          bcs +
+          jmp .BeamNotDangerous
++          
+          cmp #12
+          bcc +
+          jmp .BeamNotDangerous
++          
           
           ;does player hit beam?
+          ;modify x to point to arm object
+          
+          ;TODO - only check left/right segment!
+          
+          lda SPRITE_ACTIVE + 2,x
+          beq ++
+          ;left arm
+          lda SPRITE_CHAR_POS_Y,x
+          clc
+          adc #3
+          sta PARAM3
+          lda #0
+          sta PARAM1
+          lda SPRITE_CHAR_POS_X,x
+          sec
+          sbc #2
+          sta PARAM2
           ldy #0
-          jsr CheckIsPlayerCollidingWithBeam
+          jsr CheckIsPlayerCollidingWithYPosH
           ldy #1
-          jsr CheckIsPlayerCollidingWithBeam
+          jsr CheckIsPlayerCollidingWithYPosH
+++
+          lda SPRITE_ACTIVE + 3,x
+          beq ++
+          ;right arm
+          lda SPRITE_CHAR_POS_Y,x
+          clc
+          adc #3
+          sta PARAM3
+          lda SPRITE_CHAR_POS_X,x
+          clc
+          adc #2
+          sta PARAM1
+          lda #39
+          sta PARAM2
+          
+          ldy #0
+          jsr CheckIsPlayerCollidingWithYPosH
+          ldy #1
+          jsr CheckIsPlayerCollidingWithYPosH
+++
+
+          lda SPRITE_ACTIVE + 4,x
+          beq ++
+          
+          lda SPRITE_CHAR_POS_Y,x
+          clc
+          adc #8
+          sta PARAM2
+          lda SPRITE_CHAR_POS_X,x
+          sec
+          sbc #1
+          sta PARAM1
+          ldy #0
+          jsr CheckIsPlayerCollidingWithDiagonalLLUR
+          ldy #1
+          jsr CheckIsPlayerCollidingWithDiagonalLLUR
+
+
+++
+          lda SPRITE_ACTIVE + 5,x
+          beq ++
+          
+          lda SPRITE_CHAR_POS_X,x
+          clc
+          adc #2
+          sta PARAM1
+          lda SPRITE_CHAR_POS_Y,x
+          clc
+          adc #8
+          sta PARAM2
+          ldy #0
+          jsr CheckIsPlayerCollidingWithDiagonalULLR
+          ldy #1
+          jsr CheckIsPlayerCollidingWithDiagonalULLR
+++          
+          
           
 .BeamNotDangerous          
           lda SPRITE_MODE_POS,x
@@ -9891,8 +10250,9 @@ BOSS_MOVE_SPEED = 1
           beq .BeamStep3
           cmp #12
           bne +
-          lda #0
+          lda #128
           sta SPRITE_STATE,x
+          lda #0
           sta SPRITE_MODE_POS,x
           ;remove beam
           lda #0
@@ -9904,41 +10264,30 @@ BOSS_MOVE_SPEED = 1
           lda #39
           sta PARAM5
           jsr RestoreBeamHSegment
-          rts
           
-+          
-
-.HandleBeam
-          ;PARAM1 = beam h char
-          ;PARAM2 = beam color
-          ;PARAM3 = x char pos
-          ;PARAM4 = y char pos
-          ;PARAM5 = x end pos
-          lda BEAM_CHAR_H,y
-          sta PARAM1
-          lda BEAM_COLOR,y
-          sta PARAM2
-          lda #0
+          lda SPRITE_CHAR_POS_X,x
+          sec
+          sbc #1
           sta PARAM3
           lda SPRITE_CHAR_POS_Y,x
           clc 
-          adc #3
+          adc #8
           sta PARAM4
-          lda SPRITE_CHAR_POS_X,x
-          sec
-          sbc #2
-          sta PARAM5
-          jsr DrawBeamHSegment
-
+          jsr RestoreBeamDiagonalLLUR
+          
           lda SPRITE_CHAR_POS_X,x
           clc
           adc #2
           sta PARAM3
-          lda #39
-          sta PARAM5
-          jsr DrawBeamHSegment
+          lda SPRITE_CHAR_POS_Y,x
+          clc 
+          adc #8
+          sta PARAM4
+          jsr RestoreBeamDiagonalULLR
+          
++          
           rts
-
+          
 .BeamStep1
           ;beam
           ldy #BEAM_TYPE_DARK
@@ -9959,12 +10308,289 @@ BOSS_MOVE_SPEED = 1
           ldy #BEAM_TYPE_LIGHT2
           jmp .HandleBeam
           
+.HandleBeam
+          ;PARAM1 = beam h char
+          ;PARAM2 = beam color
+          ;PARAM3 = x char pos
+          ;PARAM4 = y char pos
+          ;PARAM5 = x end pos
+          tya
+          pha
+
+          lda BEAM_CHAR_H,y
+          sta PARAM1
+          lda BEAM_COLOR,y
+          sta PARAM2
+
+          ;left arm
+          lda SPRITE_ACTIVE + 2,x
+          beq ++
+          lda #0
+          sta PARAM3
+          lda SPRITE_CHAR_POS_Y,x
+          clc 
+          adc #3
+          sta PARAM4
+          lda SPRITE_CHAR_POS_X,x
+          sec
+          sbc #2
+          sta PARAM5
+          jsr DrawBeamHSegment
+
+++
+          lda SPRITE_ACTIVE + 3,x
+          beq ++
+          lda SPRITE_CHAR_POS_X,x
+          clc
+          adc #3
+          sta PARAM3
+          lda SPRITE_CHAR_POS_Y,x
+          clc 
+          adc #3
+          sta PARAM4
+          lda #39
+          sta PARAM5
+          jsr DrawBeamHSegment
+          
+++
+          ;diagonal left
+          pla
+          pha
+          tay
+          
+          lda SPRITE_ACTIVE + 4,x
+          beq ++
+          
+          lda BEAM_CHAR_NESW,y
+          sta PARAM1
+          lda SPRITE_CHAR_POS_X,x
+          sec
+          sbc #1
+          sta PARAM3
+          lda SPRITE_CHAR_POS_Y,x
+          clc 
+          adc #8
+          sta PARAM4
+          jsr DrawBeamDiagonalLLUR
+          
+++          
+          pla
+          tay
+          
+          lda SPRITE_ACTIVE + 5,x
+          beq ++
+          
+          lda BEAM_CHAR_NWSE,y
+          sta PARAM1
+          lda SPRITE_CHAR_POS_X,x
+          clc
+          adc #2
+          sta PARAM3
+          lda SPRITE_CHAR_POS_Y,x
+          clc 
+          adc #8
+          sta PARAM4
+          jsr DrawBeamDiagonalULLR
+          
+++          
+          rts
+
+
+
+;PARAM1 = beam h char
+;PARAM2 = beam color
+;PARAM3 = x char pos
+;PARAM4 = y char pos
+!zone DrawBeamDiagonalLLUR
+DrawBeamDiagonalLLUR
+.NextLine
+          ldy PARAM4
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          sta ZEROPAGE_POINTER_2
+          lda SCREEN_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+          clc
+          adc #( ( SCREEN_COLOR - SCREEN_CHAR ) >> 8 )
+          sta ZEROPAGE_POINTER_2 + 1
+          
+          ;left
+          ldy PARAM3
+          lda PARAM1
+          sta (ZEROPAGE_POINTER_1),y
+          lda PARAM2
+          sta (ZEROPAGE_POINTER_2),y
+          
+          inc PARAM4
+          lda PARAM4
+          cmp #22
+          beq .LowerPartDone
+         
+          ;left border reached?
+          lda PARAM3
+          beq .LowerPartDone
+          dec PARAM3
+          jmp .NextLine
+
+.LowerPartDone
+          rts
+          
+
+;PARAM3 = x char pos
+;PARAM4 = y char pos
+!zone RestoreBeamDiagonalLLUR
+RestoreBeamDiagonalLLUR
+.NextLine
+          ldy PARAM4
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          sta ZEROPAGE_POINTER_2
+          sta ZEROPAGE_POINTER_3
+          sta ZEROPAGE_POINTER_4
+          lda SCREEN_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+          clc
+          adc #( ( SCREEN_COLOR - SCREEN_CHAR ) >> 8 )
+          sta ZEROPAGE_POINTER_2 + 1
+          sec
+          sbc #( ( SCREEN_COLOR - SCREEN_BACK_CHAR ) >> 8 )
+          sta ZEROPAGE_POINTER_3 + 1
+          sec
+          sbc #( ( SCREEN_BACK_CHAR - SCREEN_BACK_COLOR ) >> 8 )
+          sta ZEROPAGE_POINTER_4 + 1
+          
+          ;left
+          ldy PARAM3
+          lda (ZEROPAGE_POINTER_3),y
+          sta (ZEROPAGE_POINTER_1),y
+          lda (ZEROPAGE_POINTER_4),y
+          sta (ZEROPAGE_POINTER_2),y
+          
+          inc PARAM4
+          lda PARAM4
+          cmp #22
+          beq .LowerPartDone
+         
+          ;left border reached?
+          lda PARAM3
+          beq .LowerPartDone
+          dec PARAM3
+          jmp .NextLine
+
+.LowerPartDone
+          rts
+
+
+;PARAM1 = beam h char
+;PARAM2 = beam color
+;PARAM3 = x char pos
+;PARAM4 = y char pos
+!zone DrawBeamDiagonalULLR
+DrawBeamDiagonalULLR
+.NextLine
+          ldy PARAM4
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          sta ZEROPAGE_POINTER_2
+          lda SCREEN_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+          clc
+          adc #( ( SCREEN_COLOR - SCREEN_CHAR ) >> 8 )
+          sta ZEROPAGE_POINTER_2 + 1
+          
+          ldy PARAM3
+          lda PARAM1
+          sta (ZEROPAGE_POINTER_1),y
+          lda PARAM2
+          sta (ZEROPAGE_POINTER_2),y
+          
+          inc PARAM4
+          lda PARAM4
+          cmp #22
+          beq .LowerPartDone
+         
+          ;left border reached?
+          lda PARAM3
+          cmp #39
+          beq .LowerPartDone
+          inc PARAM3
+          jmp .NextLine
+
+.LowerPartDone
+          rts
+          
+
+;PARAM3 = x char pos
+;PARAM4 = y char pos
+!zone RestoreBeamDiagonalULLR
+RestoreBeamDiagonalULLR
+.NextLine
+          ldy PARAM4
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          sta ZEROPAGE_POINTER_2
+          sta ZEROPAGE_POINTER_3
+          sta ZEROPAGE_POINTER_4
+          lda SCREEN_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+          clc
+          adc #( ( SCREEN_COLOR - SCREEN_CHAR ) >> 8 )
+          sta ZEROPAGE_POINTER_2 + 1
+          sec
+          sbc #( ( SCREEN_COLOR - SCREEN_BACK_CHAR ) >> 8 )
+          sta ZEROPAGE_POINTER_3 + 1
+          sec
+          sbc #( ( SCREEN_BACK_CHAR - SCREEN_BACK_COLOR ) >> 8 )
+          sta ZEROPAGE_POINTER_4 + 1
+          
+          ldy PARAM3
+          lda (ZEROPAGE_POINTER_3),y
+          sta (ZEROPAGE_POINTER_1),y
+          lda (ZEROPAGE_POINTER_4),y
+          sta (ZEROPAGE_POINTER_2),y
+          
+          inc PARAM4
+          lda PARAM4
+          cmp #22
+          beq .LowerPartDone
+         
+          ;left border reached?
+          lda PARAM3
+          cmp #39
+          beq .LowerPartDone
+          inc PARAM3
+          jmp .NextLine
+
+.LowerPartDone
+          rts
+
+
+
 
 ;------------------------------------------------------------
 ;boss helper
 ;------------------------------------------------------------
 !zone BehaviourBossHelper
 BehaviourBossHelper
+          lda SPRITE_HITBACK,x
+          beq .NoHitBack
+
+          dec SPRITE_HITBACK,x
+          
+          ldy SPRITE_HITBACK,x
+          lda BOSS_FLASH_TABLE,y
+          sta VIC_SPRITE_COLOR,x
+          
+          cpy #0
+          bne .NoHitBack
+          
+          ;make vulnerable again
+          lda #0
+          sta SPRITE_STATE,x
+          lda #2
+          sta VIC_SPRITE_COLOR,x
+        
+.NoHitBack        
           rts
 
 
@@ -12867,7 +13493,7 @@ TYPE_START_HP
           !byte 10    ;boss5
           !byte 10    ;boss6
           !byte 25    ;boss7
-          !byte 25    ;boss helper
+          !byte 5     ;boss helper
           
 TYPE_ANNOYED_COLOR
           !byte 0     ;dummy
@@ -12996,7 +13622,7 @@ TYPE_START_STATE
           !byte 0             ;boss4
           !byte 0             ;boss5
           !byte 128           ;boss6
-          !byte 0             ;boss7
+          !byte 128           ;boss7
           !byte 0             ;boss helper
           
 TYPE_START_DELTA_Y
@@ -13479,7 +14105,17 @@ MOVE_STONE_POS_FRONT
           !byte 0
 CURRENT_INDEX
           !byte 0
-      
+  
+MOVE_BORDER_LEFT
+          !byte 0
+MOVE_BORDER_RIGHT
+          !byte 39
+MOVE_BORDER_TOP
+          !byte 0
+MOVE_BORDER_BOTTOM
+          !byte 23
+BOSS_PARTS_KILLED
+          !byte 0
           
 !source "level_data.asm"
 
