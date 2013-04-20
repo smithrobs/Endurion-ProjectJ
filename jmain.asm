@@ -1257,7 +1257,7 @@ SetGameIRQ
           sta $0314
           lda #>IrqInGame
           sta $0315
-
+ 
           ;acknowledge any pending cia timer interrupts
           ;this is just so we're 100% safe
           lda $dc0d 
@@ -1265,39 +1265,7 @@ SetGameIRQ
 
           cli
           rts
-
-
-;-----------------------------------
-;release IRQ
-;-----------------------------------
-!zone ReleaseIRQ
-ReleaseIRQ
-            
-          sei
-
-          lda #$36 ; make sure that IO regs at $dxxx are visible
-          sta PROCESSOR_PORT
-
-          lda #$ff ;enable cia #1 generating timer irqs
-          sta $dc0d ;which are used by the system to flash cursor, etc
-
-          ;no more raster irqs
-          lda #$00 
-          sta $d01a
-
-          lda #$31
-          sta $0314
-          lda #$EA
-          sta $0315
-
-          ;acknowledge any pending cia timer interrupts
-          ;this is just so we're 100% safe
-          lda $dc0d 
-          lda $dd0d 
-
-          cli
-          rts
-
+ 
 
 ;-----------------------------------
 ;IRQ Title - set bitmap mode
@@ -2318,8 +2286,13 @@ PlayerControl
           clc
           adc #1
           cmp SPRITE_CHAR_POS_Y,x
+          beq .PickItem
+
+          lda ITEM_POS_Y,y
+          cmp SPRITE_CHAR_POS_Y,x
           bne .NextItem
           
+.PickItem          
           ;pick item!
           jsr PickItem
           
