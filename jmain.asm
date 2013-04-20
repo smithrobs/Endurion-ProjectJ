@@ -112,28 +112,167 @@ SPRITE_PLAYER           = SPRITE_BASE + 0
           sta SCREEN_COLOR + 2
           sta SCREEN_COLOR + 3
           sta SCREEN_COLOR + 4
-
-          ;set sprite 1 pos          
+          
+          
+          ;init sprite 1 pos          
           lda #100
           sta 53248
           sta 53248 + 1
+          sta SPRITE_POS_X
+          sta SPRITE_POS_Y
+          
           ;set sprite image
           lda #SPRITE_PLAYER
           sta SPRITE_POINTER_BASE
+          
           ;enable sprite 1
           lda #1
           sta 53248 + 21
           
 
-          ;the main game loop
+;------------------------------------------------------------
+;the main game loop
+;------------------------------------------------------------
+
 GameLoop  
-          ;border flashing
-          inc 53280
-          
           jsr WaitFrame
 
+          jsr PlayerControl
+          
           jmp GameLoop          
           
+          
+;------------------------------------------------------------
+;check joystick (player control)
+;------------------------------------------------------------
+!zone PlayerControl
+PlayerControl
+          lda #$02
+          bit $dc00
+          bne .NotDownPressed
+          jsr PlayerMoveDown
+          
+.NotDownPressed          
+          lda #$01
+          bit $dc00
+          bne .NotUpPressed
+          jsr PlayerMoveUp
+          
+.NotUpPressed          
+          lda #$04
+          bit $dc00
+          bne .NotLeftPressed
+          jsr PlayerMoveLeft
+          
+.NotLeftPressed
+          lda #$08
+          bit $dc00
+          bne .NotRightPressed
+          jsr PlayerMoveRight
+
+.NotRightPressed
+          rts
+
+PlayerMoveLeft
+          ldx #0
+          jsr MoveSpriteLeft
+          rts
+          
+PlayerMoveRight
+          ldx #0
+          jsr MoveSpriteRight
+          rts
+
+PlayerMoveUp
+          ldx #0
+          jsr MoveSpriteUp
+          rts
+          
+PlayerMoveDown
+          ldx #0
+          jsr MoveSpriteDown
+          rts
+
+;------------------------------------------------------------
+;Move Sprite Left
+;expect x as sprite index (0 to 7)
+;------------------------------------------------------------
+!zone MoveSpriteLeft
+MoveSpriteLeft
+          dec SPRITE_POS_X,x
+          bpl .NoChangeInExtendedFlag
+          
+          lda BIT_TABLE,x
+          eor #$ff
+          and SPRITE_POS_X_EXTEND
+          sta SPRITE_POS_X_EXTEND
+          sta 53248 + 16
+          
+.NoChangeInExtendedFlag     
+          txa
+          asl
+          tay
+          
+          lda SPRITE_POS_X,x
+          sta 53248,y
+          rts  
+
+;------------------------------------------------------------
+;Move Sprite Right
+;expect x as sprite index (0 to 7)
+;------------------------------------------------------------
+!zone MoveSpriteRight
+MoveSpriteRight
+          inc SPRITE_POS_X,x
+          lda SPRITE_POS_X,x
+          bne .NoChangeInExtendedFlag
+          
+          lda BIT_TABLE,x
+          ora SPRITE_POS_X_EXTEND
+          sta SPRITE_POS_X_EXTEND
+          sta 53248 + 16
+          
+.NoChangeInExtendedFlag     
+          txa
+          asl
+          tay
+          
+          lda SPRITE_POS_X,x
+          sta 53248,y
+          rts  
+
+;------------------------------------------------------------
+;Move Sprite Up
+;expect x as sprite index (0 to 7)
+;------------------------------------------------------------
+!zone MoveSpriteUp
+MoveSpriteUp
+          dec SPRITE_POS_Y,x
+          
+          txa
+          asl
+          tay
+          
+          lda SPRITE_POS_Y,x
+          sta 53249,y
+          rts  
+
+;------------------------------------------------------------
+;Move Sprite Down
+;expect x as sprite index (0 to 7)
+;------------------------------------------------------------
+!zone MoveSpriteDown
+MoveSpriteDown
+          inc SPRITE_POS_Y,x
+          
+          txa
+          asl
+          tay
+          
+          lda SPRITE_POS_Y,x
+          sta 53249,y
+          rts  
+
           
 !zone WaitFrame
           ;wait for the raster to reach line $f8
@@ -228,6 +367,19 @@ CopySprites
           bne .SpriteLoop
 
           rts
+          
+;------------------------------------------------------------
+;game variables
+;------------------------------------------------------------
+
+SPRITE_POS_X
+          !byte 0,0,0,0,0,0,0,0
+SPRITE_POS_X_EXTEND
+          !byte 0
+SPRITE_POS_Y
+          !byte 0,0,0,0,0,0,0,0
+BIT_TABLE
+          !byte 1,2,4,8,16,32,64,128
           
 
 CHARSET
