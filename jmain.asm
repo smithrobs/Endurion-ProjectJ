@@ -741,7 +741,7 @@ TitleScreenWithoutIRQ
         
 .Restart
           jsr WaitFrame
-          jsr ReleaseTitleIRQ
+          jsr SetGameIRQ
 
 !ifdef MUSIC_PLAYING{
           ;initialise music player
@@ -1173,10 +1173,45 @@ InitTitleIRQ
 
 
 ;-----------------------------------
+;init IRQ
+;-----------------------------------
+!zone SetGameIRQ
+SetGameIRQ
+         
+          ;wait for exact frame so we don't end up on the wrong
+          ;side of the raster
+          jsr WaitFrame
+          sei
+
+          lda #$36 ; make sure that IO regs at $dxxx are visible
+          sta PROCESSOR_PORT
+
+          lda #$ff ;nr of rasterline we want our irq occur at
+          sta $d012
+
+          lda #$1b ;MSB of d011 is the MSB of the requested rasterline
+          sta $d011 ;as rastercounter goes from 0-312
+
+          ;set irq vector to point to our routine
+          lda #<IrqInGame
+          sta $0314
+          lda #>IrqInGame
+          sta $0315
+
+          ;acknowledge any pending cia timer interrupts
+          ;this is just so we're 100% safe
+          lda $dc0d 
+          lda $dd0d 
+
+          cli
+          rts
+
+
+;-----------------------------------
 ;release IRQ
 ;-----------------------------------
-!zone ReleaseTitleIRQ
-ReleaseTitleIRQ
+!zone ReleaseIRQ
+ReleaseIRQ
             
           sei
 
@@ -1237,6 +1272,25 @@ IrqSetBitmapMode
           lda #%10111000
           sta VIC_MEMORY_CONTROL
 
+          JMP $ea81
+
+
+;-----------------------------------
+;IRQ Title - set bitmap mode
+;-----------------------------------
+!zone IrqInGame
+IrqInGame
+          
+
+!ifdef MUSIC_PLAYING{
+          ;play music
+          jsr MUSIC_PLAYER + 3
+}
+
+          ;acknowledge VIC irq
+          lda $d019
+          sta $d019
+          
           JMP $ea31
 
 
@@ -1272,8 +1326,11 @@ IrqSetTextMode
           ;bitmap to lower half, screen char pos at 3 * 1024 ( + 16384)
           lda #%00111110
           sta VIC_MEMORY_CONTROL
-
-          jmp $ea31
+    
+!ifdef MUSIC_PLAYING{
+          jsr MUSIC_PLAYER + 3
+}
+          jmp $ea81
 
 
 ;------------------------------------------------------------
@@ -9873,12 +9930,9 @@ WaitFrame
           lda $d012
           cmp #$F8
           bne .WaitStep2
-
-!ifdef MUSIC_PLAYING{
-          ;play music
-          jsr MUSIC_PLAYER + 3
+          
           rts
-}
+
 
 ;------------------------------------------------------------
 ;Looks for an empty sprite slot, returns in X
