@@ -48,7 +48,7 @@ CIA_PRA                 = $dd00
 
 PROCESSOR_PORT          = $01
 
-START_LEVEL             = 42
+START_LEVEL             = 0
 
 MUSIC_IN_GAME_TUNE		    = $00
 MUSIC_TITLE_TUNE			     = $01
@@ -757,7 +757,7 @@ TitleScreenWithoutIRQ
           sta VIC_SPRITE_EXPAND_X
           sta VIC_SPRITE_EXPAND_Y
           sta CHAPTER
-          jsr ShowStory
+          jsr ShowChapter
 
           ;game start values
           lda #3
@@ -767,6 +767,9 @@ TitleScreenWithoutIRQ
           sta PLAYER_RELOAD_SPEED
           lda #5
           sta PLAYER_FORCE_RANGE
+          lda #2
+          sta PLAYER_SHELLS
+          sta PLAYER_SHELLS_MAX
           
           ;setup level
           lda #$0b
@@ -787,6 +790,7 @@ TitleScreenWithoutIRQ
           
           jsr DisplayGetReady
           
+DisplayScoreDisplay
           ;score display according to game mode
           lda GAME_MODE
           cmp #GT_SINGLE_PLAYER_DEAN
@@ -843,20 +847,16 @@ TitleScreenWithoutIRQ
 .NoPortChange          
           
           ;full shells
+          ldy #0
+.RefillShellImage          
           lda #2
-          sta SCREEN_COLOR + 23 * 40 + 19
-          sta SCREEN_COLOR + 23 * 40 + 20
+          sta SCREEN_COLOR + 23 * 40 + 19,y
           lda #7
-          sta SCREEN_COLOR + 24 * 40 + 19
-          sta SCREEN_COLOR + 24 * 40 + 20
-
-          lda #2
-          sta PLAYER_SHELLS
-          sta PLAYER_SHELLS_MAX
-
-          lda #0
-          sta PLAYER_INVINCIBLE          
-          sta SPRITE_STATE
+          sta SCREEN_COLOR + 24 * 40 + 19,y
+          
+          iny
+          cpy PLAYER_SHELLS_MAX
+          bne .RefillShellImage
           
 !ifdef MUSIC_PLAYING{
           ;initialise music player
@@ -872,9 +872,34 @@ TitleScreenWithoutIRQ
 ;------------------------------------------------------------
 ;story pages
 ;------------------------------------------------------------
-!zone ShowStory
-ShowStory
+!zone ShowChapterEnd
+ShowChapterEnd
+          ;clear screen
+          lda #32
+          ldy #1
+          jsr ClearScreen
+          jsr ResetObjects
+          
+          ldy CHAPTER
+          lda CHAPTER_END_PAGES_LO,y
+          sta ZEROPAGE_POINTER_1
+          lda CHAPTER_END_PAGES_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+          
+          lda #0
+          sta VIC_SPRITE_ENABLE
+          sta VIC_SPRITE_X_EXTEND
+          sta SPRITE_POS_X_EXTEND
+          
+          lda #1
+          sta PARAM1
+          lda #1
+          sta PARAM2
+          jsr DisplayText
+          jmp StoryLoop
 
+!zone ShowChapter
+ShowChapter
           ;clear screen
           lda #32
           ldy #1
@@ -886,7 +911,7 @@ ShowStory
           sta ZEROPAGE_POINTER_1
           lda CHAPTER_PAGES_HI,y
           sta ZEROPAGE_POINTER_1 + 1
-          
+
           lda #0
           sta VIC_SPRITE_ENABLE
           sta VIC_SPRITE_X_EXTEND
@@ -937,7 +962,7 @@ ShowStory
           lda #0
           sta BUTTON_RELEASED
           
-.StoryLoop          
+StoryLoop          
           jsr WaitFrame
          
           jsr ObjectControl
@@ -948,7 +973,7 @@ ShowStory
           
           ;button pushed
           lda BUTTON_RELEASED
-          beq .StoryLoop
+          beq StoryLoop
           
           lda #0
           sta VIC_SPRITE_ENABLE
@@ -961,7 +986,7 @@ ShowStory
 .ButtonNotPressed
           lda #1
           sta BUTTON_RELEASED
-          jmp .StoryLoop
+          jmp StoryLoop
 
 ;------------------------------------------------------------
 ;the main game loop
@@ -1430,6 +1455,36 @@ GameFlowControl
 
 
 .GoToNextLevel
+          lda LEVEL_NR
+          cmp #10
+          beq .ShowStory
+          cmp #21
+          beq .ShowStory
+          jmp .NoStory
+        
+.ShowStory        
+          jsr ShowChapterEnd
+          inc CHAPTER
+          jsr ShowChapter
+          pla
+          pla
+          
+          lda #$0b
+          sta VIC_CONTROL_MODE
+
+          jsr StartLevel
+          
+          inc LEVEL_NR
+          jsr BuildScreen
+          
+          jsr CopyLevelToBackBuffer
+          jsr DisplayGetReady
+          
+          lda #$1b
+          sta VIC_CONTROL_MODE          
+          jmp DisplayScoreDisplay          
+          
+.NoStory          
           lda #$0b
           sta VIC_CONTROL_MODE
 
@@ -1562,6 +1617,19 @@ StartLevel
           bne .ClearItemLoop
           
           
+          ldy #0
+.RefillShellImage          
+          lda #2
+          sta SCREEN_COLOR + 23 * 40 + 19,y
+          lda #7
+          sta SCREEN_COLOR + 24 * 40 + 19,y
+          
+          iny
+          cpy PLAYER_SHELLS_MAX
+          bne .RefillShellImage
+
+          lda PLAYER_SHELLS_MAX
+          sta PLAYER_SHELLS
           rts
           
 
@@ -11972,6 +12040,12 @@ CHAPTER_PAGES_LO
 CHAPTER_PAGES_HI
           !byte >TEXT_STORY_1
           !byte >TEXT_STORY_2
+CHAPTER_END_PAGES_LO
+          !byte <TEXT_CHAPTER_1_END
+          !byte <TEXT_CHAPTER_2_END
+CHAPTER_END_PAGES_HI
+          !byte >TEXT_CHAPTER_1_END
+          !byte >TEXT_CHAPTER_2_END
           
           
 TEXT_STORY_1
@@ -11981,13 +12055,21 @@ TEXT_STORY_1
           !text "WE SHOULD INVESTIGATE THE TOWN-"
           !text "CEMETERY",59,"*"
           
+TEXT_CHAPTER_1_END
+          !text "WHAT THE HELL WAS THAT SHADOW",31,"--"
+          !text "I HOPE THAT WAS THE LAST WE SAW OF IT*"
+
 TEXT_STORY_2
-          !text "WE GOT A HINT BY OTHER HUNTERS-"
+          !text "WE HAVE GOT A HINT BY OTHER HUNTERS-"
           !text "ABOUT WEIRD VOICES AND SHRIEKS-"
-          !text "IN THE WOODS",59," THERE ALSO-"
-          !text "SEEM TO BE SOME MISSING-"
-          !text "HIKERS",59,"*"
-          
+          !text "IN THE WOODS",59," THERE ALSO SEEM-"
+          !text "TO BE SOME MISSING HIKERS",59,"*"
+
+TEXT_CHAPTER_2_END
+          !text "ANOTHER SHADOW!--"
+          !text "SOMETHING IS BREWING, AND I DO NOT LIKE-"
+          !text "IT*"
+
 COLOR_FADE_POS
           !byte 0
           
