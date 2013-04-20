@@ -93,7 +93,7 @@ SCREEN_BACK_COLOR       = $BC00
 SPRITE_POINTER_BASE     = SCREEN_CHAR + 1016
 
 ;number of sprites divided by four
-NUMBER_OF_SPRITES_DIV_4       = 152 / 4
+NUMBER_OF_SPRITES_DIV_4       = 156 / 4
 
 ;sprite number constant
 SPRITE_BASE                   = 64
@@ -277,6 +277,9 @@ SPRITE_R                      = SPRITE_BASE + 147
 SPRITE_A                      = SPRITE_BASE + 148
 SPRITE_D                      = SPRITE_BASE + 149
 SPRITE_Y                      = SPRITE_BASE + 150
+SPRITE_M                      = SPRITE_BASE + 151
+SPRITE_O                      = SPRITE_BASE + 152
+SPRITE_V                      = SPRITE_BASE + 153
 
 ;offset from calculated char pos to true sprite pos
 SPRITE_CENTER_OFFSET_X  = 8
@@ -1566,6 +1569,66 @@ StartLevel
 ;------------------------------------------------------------
 !zone CheckForHighscore
 CheckForHighscore
+          ;display game over
+          jsr DisplayGameOver
+          
+          ;animate
+          lda #0
+          sta SPRITE_STATE
+          
+.GameOverDelay          
+          jsr WaitFrame
+          
+          lda SPRITE_STATE
+          and #$1f
+          tax
+          ldy #0
+          lda #8
+          sta PARAM2
+          
+-          
+          lda PATH_8_DY,x
+          and #$80
+          bne +
+ 
+          lda PATH_8_DY,x
+          clc
+          adc #110
+--          
+          sta VIC_SPRITE_Y_POS,y
+          jmp ++
+          
+          
++          
+          lda PATH_8_DY,x
+          and #$7f
+          sta PARAM1
+          
+          lda #110
+          sec
+          sbc PARAM1
+          jmp --
+          
+++          
+          iny
+          iny
+          
+          inx
+          inx
+          txa
+          and #$1f
+          tax
+          
+          dec PARAM2
+          bne -
+          
+          inc SPRITE_STATE
+          bne .GameOverDelay
+          
+          
+          ;check for highscore
+          lda #0
+          sta VIC_SPRITE_ENABLE
 
           lda #0
           sta PARAM1
@@ -8793,6 +8856,63 @@ DisplayGetReady
           lda #SPRITE_D
           sta SPRITE_POINTER_BASE + 6
           lda #SPRITE_Y
+          sta SPRITE_POINTER_BASE + 7
+          
+          lda #0
+          sta VIC_SPRITE_MULTICOLOR
+          lda #$80
+          sta VIC_SPRITE_X_EXTEND
+          lda #$ff
+          sta VIC_SPRITE_ENABLE
+          sta VIC_SPRITE_EXPAND_X
+          sta VIC_SPRITE_EXPAND_Y
+          rts
+
+
+
+;------------------------------------------------------------
+;displays game over
+;------------------------------------------------------------
+!zone DisplayGameOver
+DisplayGameOver
+          ldx #0
+          ldy #0
+          
+-          
+          lda GETREADY_SPRITE_X_POS,x
+          sta VIC_SPRITE_X_POS,y
+          lda GETREADY_SPRITE_COLOR,x
+          sta VIC_SPRITE_COLOR,x
+          iny
+          iny
+          inx
+          cpx #8
+          bne -
+          
+          lda #110
+          sta VIC_SPRITE_Y_POS
+          sta VIC_SPRITE_Y_POS + 2
+          sta VIC_SPRITE_Y_POS + 4
+          sta VIC_SPRITE_Y_POS + 6
+          sta VIC_SPRITE_Y_POS + 8
+          sta VIC_SPRITE_Y_POS + 10
+          sta VIC_SPRITE_Y_POS + 12
+          sta VIC_SPRITE_Y_POS + 14
+          
+          lda #SPRITE_G
+          sta SPRITE_POINTER_BASE
+          lda #SPRITE_A
+          sta SPRITE_POINTER_BASE + 1
+          lda #SPRITE_M
+          sta SPRITE_POINTER_BASE + 2
+          lda #SPRITE_E
+          sta SPRITE_POINTER_BASE + 3
+          sta SPRITE_POINTER_BASE + 6
+          lda #SPRITE_O
+          sta SPRITE_POINTER_BASE + 4
+          lda #SPRITE_V
+          sta SPRITE_POINTER_BASE + 5
+          lda #SPRITE_R
           sta SPRITE_POINTER_BASE + 7
           
           lda #0
