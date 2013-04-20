@@ -70,7 +70,8 @@ LD_OBJECT               = 3     ;data contains x,y,type
 
 ;object type constants
 TYPE_PLAYER             = 1
-TYPE_ENEMY              = 2
+TYPE_ENEMY_LR           = 2
+TYPE_ENEMY_UD           = 3
 
 ;this creates a basic start
 *=$0801
@@ -181,7 +182,7 @@ TYPE_ENEMY              = 2
 GameLoop  
           jsr WaitFrame
 
-          jsr PlayerControl
+          jsr ObjectControl
           
           jmp GameLoop          
           
@@ -253,6 +254,7 @@ PlayerControl
           jsr PlayerMoveRight
 
 .NotRightPressed
+          ldx #0
           rts
 
 .PlayerIsJumping
@@ -290,30 +292,40 @@ PlayerControl
 ;PlayerMoveLeft
 ;------------------------------------------------------------
 !zone PlayerMoveLeft
-PlayerMoveLeft
+PlayerMoveLeft  
           ldx #0
           
-          lda SPRITE_CHAR_POS_X_DELTA
+          ;jmp ObjectMoveLeft
+
+          
+;------------------------------------------------------------
+;move object left if not blocked
+;x = object index
+;------------------------------------------------------------
+!zone ObjectMoveLeft
+ObjectMoveLeft          
+          
+          lda SPRITE_CHAR_POS_X_DELTA,x
           beq .CheckCanMoveLeft
           
 .CanMoveLeft
-          dec SPRITE_CHAR_POS_X_DELTA
+          dec SPRITE_CHAR_POS_X_DELTA,x
           
           jsr MoveSpriteLeft
           lda #1
           rts
           
 .CheckCanMoveLeft
-          lda SPRITE_CHAR_POS_Y_DELTA
+          lda SPRITE_CHAR_POS_Y_DELTA,x
           beq .NoThirdCharCheckNeeded
           
-          ldy SPRITE_CHAR_POS_Y
+          ldy SPRITE_CHAR_POS_Y,x
           lda SCREEN_LINE_OFFSET_TABLE_LO,y
           sta ZEROPAGE_POINTER_1
           lda SCREEN_LINE_OFFSET_TABLE_HI,y
           sta ZEROPAGE_POINTER_1 + 1
 
-          lda SPRITE_CHAR_POS_X
+          lda SPRITE_CHAR_POS_X,x
           clc
           adc #39
           tay
@@ -324,14 +336,14 @@ PlayerMoveLeft
           bne .BlockedLeft
           
 .NoThirdCharCheckNeeded          
-          ldy SPRITE_CHAR_POS_Y
+          ldy SPRITE_CHAR_POS_Y,x
           dey
           lda SCREEN_LINE_OFFSET_TABLE_LO,y
           sta ZEROPAGE_POINTER_1
           lda SCREEN_LINE_OFFSET_TABLE_HI,y
           sta ZEROPAGE_POINTER_1 + 1
           
-          ldy SPRITE_CHAR_POS_X
+          ldy SPRITE_CHAR_POS_X,x
           dey
           
           lda (ZEROPAGE_POINTER_1),y
@@ -349,8 +361,8 @@ PlayerMoveLeft
           
           
           lda #8
-          sta SPRITE_CHAR_POS_X_DELTA
-          dec SPRITE_CHAR_POS_X
+          sta SPRITE_CHAR_POS_X_DELTA,x
+          dec SPRITE_CHAR_POS_X,x
           jmp .CanMoveLeft
           
 .BlockedLeft
@@ -364,20 +376,30 @@ PlayerMoveLeft
 !zone PlayerMoveRight
 PlayerMoveRight
           ldx #0
+
+          jmp ObjectMoveRight
           
-          lda SPRITE_CHAR_POS_X_DELTA
+                    
+;------------------------------------------------------------
+;move object right if not blocked
+;x = object index
+;------------------------------------------------------------
+!zone ObjectMoveRight
+ObjectMoveRight
+                    
+          lda SPRITE_CHAR_POS_X_DELTA,x
           beq .CheckCanMoveRight
           
 .CanMoveRight
-          inc SPRITE_CHAR_POS_X_DELTA
+          inc SPRITE_CHAR_POS_X_DELTA,x
           
-          lda SPRITE_CHAR_POS_X_DELTA
+          lda SPRITE_CHAR_POS_X_DELTA,x
           cmp #8
           bne .NoCharStep
           
           lda #0
-          sta SPRITE_CHAR_POS_X_DELTA
-          inc SPRITE_CHAR_POS_X
+          sta SPRITE_CHAR_POS_X_DELTA,x
+          inc SPRITE_CHAR_POS_X,x
           
 .NoCharStep          
           jsr MoveSpriteRight
@@ -385,17 +407,17 @@ PlayerMoveRight
           rts
           
 .CheckCanMoveRight
-          lda SPRITE_CHAR_POS_Y_DELTA
+          lda SPRITE_CHAR_POS_Y_DELTA,x
           beq .NoThirdCharCheckNeeded
           
-          ldy SPRITE_CHAR_POS_Y
+          ldy SPRITE_CHAR_POS_Y,x
           iny
           lda SCREEN_LINE_OFFSET_TABLE_LO,y
           sta ZEROPAGE_POINTER_1
           lda SCREEN_LINE_OFFSET_TABLE_HI,y
           sta ZEROPAGE_POINTER_1 + 1
 
-          ldy SPRITE_CHAR_POS_X
+          ldy SPRITE_CHAR_POS_X,x
           iny
           
           lda (ZEROPAGE_POINTER_1),y
@@ -405,14 +427,14 @@ PlayerMoveRight
           
 .NoThirdCharCheckNeeded          
 
-          ldy SPRITE_CHAR_POS_Y
+          ldy SPRITE_CHAR_POS_Y,x
           dey
           lda SCREEN_LINE_OFFSET_TABLE_LO,y
           sta ZEROPAGE_POINTER_1
           lda SCREEN_LINE_OFFSET_TABLE_HI,y
           sta ZEROPAGE_POINTER_1 + 1
           
-          ldy SPRITE_CHAR_POS_X
+          ldy SPRITE_CHAR_POS_X,x
           iny
           lda (ZEROPAGE_POINTER_1),y
           
@@ -441,19 +463,28 @@ PlayerMoveRight
 PlayerMoveUp
           ldx #0
           
-          lda SPRITE_CHAR_POS_Y_DELTA
+          jmp ObjectMoveUp
+          
+;------------------------------------------------------------
+;move object up if not blocked
+;x = object index
+;------------------------------------------------------------
+!zone ObjectMoveUp
+ObjectMoveUp
+          
+          lda SPRITE_CHAR_POS_Y_DELTA,x
           beq .CheckCanMoveUp
           
 .CanMoveUp
-          dec SPRITE_CHAR_POS_Y_DELTA
+          dec SPRITE_CHAR_POS_Y_DELTA,x
           
-          lda SPRITE_CHAR_POS_Y_DELTA
+          lda SPRITE_CHAR_POS_Y_DELTA,x
           cmp #$ff
           bne .NoCharStep
           
-          dec SPRITE_CHAR_POS_Y
+          dec SPRITE_CHAR_POS_Y,x
           lda #7
-          sta SPRITE_CHAR_POS_Y_DELTA
+          sta SPRITE_CHAR_POS_Y_DELTA,x
           
 .NoCharStep          
           jsr MoveSpriteUp
@@ -461,10 +492,10 @@ PlayerMoveUp
           rts
           
 .CheckCanMoveUp
-          lda SPRITE_CHAR_POS_X_DELTA
+          lda SPRITE_CHAR_POS_X_DELTA,x
           beq .NoSecondCharCheckNeeded
           
-          ldy SPRITE_CHAR_POS_Y
+          ldy SPRITE_CHAR_POS_Y,x
           dey
           dey
           lda SCREEN_LINE_OFFSET_TABLE_LO,y
@@ -472,7 +503,7 @@ PlayerMoveUp
           lda SCREEN_LINE_OFFSET_TABLE_HI,y
           sta ZEROPAGE_POINTER_1 + 1
 
-          ldy SPRITE_CHAR_POS_X
+          ldy SPRITE_CHAR_POS_X,x
           iny
           
           lda (ZEROPAGE_POINTER_1),y
@@ -482,7 +513,7 @@ PlayerMoveUp
           
 .NoSecondCharCheckNeeded          
 
-          ldy SPRITE_CHAR_POS_Y
+          ldy SPRITE_CHAR_POS_Y,x
           dey
           dey
           lda SCREEN_LINE_OFFSET_TABLE_LO,y
@@ -490,7 +521,7 @@ PlayerMoveUp
           lda SCREEN_LINE_OFFSET_TABLE_HI,y
           sta ZEROPAGE_POINTER_1 + 1
           
-          ldy SPRITE_CHAR_POS_X
+          ldy SPRITE_CHAR_POS_X,x
           
           lda (ZEROPAGE_POINTER_1),y
           
@@ -511,19 +542,28 @@ PlayerMoveUp
 PlayerMoveDown
           ldx #0
           
-          lda SPRITE_CHAR_POS_Y_DELTA
+          jmp ObjectMoveDown
+
+;------------------------------------------------------------
+;move object down if not blocked
+;x = object index
+;------------------------------------------------------------
+!zone ObjectMoveDown
+ObjectMoveDown
+          
+          lda SPRITE_CHAR_POS_Y_DELTA,x
           beq .CheckCanMoveDown
           
 .CanMoveDown
-          inc SPRITE_CHAR_POS_Y_DELTA
+          inc SPRITE_CHAR_POS_Y_DELTA,x
           
-          lda SPRITE_CHAR_POS_Y_DELTA
+          lda SPRITE_CHAR_POS_Y_DELTA,x
           cmp #8
           bne .NoCharStep
           
           lda #0
-          sta SPRITE_CHAR_POS_Y_DELTA
-          inc SPRITE_CHAR_POS_Y
+          sta SPRITE_CHAR_POS_Y_DELTA,x
+          inc SPRITE_CHAR_POS_Y,x
           
 .NoCharStep          
           jsr MoveSpriteDown
@@ -531,17 +571,17 @@ PlayerMoveDown
           rts
           
 .CheckCanMoveDown
-          lda SPRITE_CHAR_POS_X_DELTA
+          lda SPRITE_CHAR_POS_X_DELTA,x
           beq .NoSecondCharCheckNeeded
           
-          ldy SPRITE_CHAR_POS_Y
+          ldy SPRITE_CHAR_POS_Y,x
           iny
           lda SCREEN_LINE_OFFSET_TABLE_LO,y
           sta ZEROPAGE_POINTER_1
           lda SCREEN_LINE_OFFSET_TABLE_HI,y
           sta ZEROPAGE_POINTER_1 + 1
 
-          ldy SPRITE_CHAR_POS_X
+          ldy SPRITE_CHAR_POS_X,x
           iny
           lda (ZEROPAGE_POINTER_1),y
           
@@ -550,14 +590,14 @@ PlayerMoveDown
           
 .NoSecondCharCheckNeeded          
 
-          ldy SPRITE_CHAR_POS_Y
+          ldy SPRITE_CHAR_POS_Y,x
           iny
           lda SCREEN_LINE_OFFSET_TABLE_LO,y
           sta ZEROPAGE_POINTER_1
           lda SCREEN_LINE_OFFSET_TABLE_HI,y
           sta ZEROPAGE_POINTER_1 + 1
           
-          ldy SPRITE_CHAR_POS_X
+          ldy SPRITE_CHAR_POS_X,x
           
           lda (ZEROPAGE_POINTER_1),y
           
@@ -568,6 +608,90 @@ PlayerMoveDown
           
 .BlockedDown
           lda #0
+          rts
+          
+
+
+;------------------------------------------------------------
+;Enemy Behaviour
+;------------------------------------------------------------
+!zone ObjectControl
+ObjectControl
+          ldx #0
+          
+.ObjectLoop          
+          ldy SPRITE_ACTIVE,x
+          beq .NextObject
+          
+          ;enemy is active
+          dey
+          lda ENEMY_BEHAVIOUR_TABLE_LO,y
+          sta ZEROPAGE_POINTER_2
+          lda ENEMY_BEHAVIOUR_TABLE_HI,y
+          sta ZEROPAGE_POINTER_2 + 1
+          
+          ;set up return address for rts
+          lda #>( .NextObject - 1 )
+          pha 
+          lda #<( .NextObject - 1 )
+          pha
+          
+          jmp (ZEROPAGE_POINTER_2)
+          
+.NextObject          
+          inx
+          cpx #8
+          bne .ObjectLoop
+          rts
+          
+
+;------------------------------------------------------------
+;simply move left/right
+;------------------------------------------------------------
+!zone BehaviourDumbEnemyLR
+BehaviourDumbEnemyLR
+          lda SPRITE_DIRECTION,x
+          beq .MoveRight
+          
+          ;move left
+          jsr ObjectMoveLeft
+          beq .ToggleDirection
+          rts
+          
+.MoveRight
+          jsr ObjectMoveRight
+          beq .ToggleDirection
+          rts
+          
+.ToggleDirection
+          lda SPRITE_DIRECTION,x
+          eor #1
+          sta SPRITE_DIRECTION,x
+          rts
+ 
+ 
+;------------------------------------------------------------
+;simply move up/down
+;------------------------------------------------------------
+!zone BehaviourDumbEnemyUD
+BehaviourDumbEnemyUD
+          lda SPRITE_DIRECTION,x
+          beq .MoveDown
+          
+          ;move up
+          jsr ObjectMoveUp
+          beq .ToggleDirection
+          rts
+          
+.MoveDown
+          jsr ObjectMoveDown
+          beq .ToggleDirection
+          rts
+          
+.ToggleDirection
+          lda SPRITE_DIRECTION,x
+          eor #1
+          sta SPRITE_DIRECTION,x
           rts
           
 
@@ -969,8 +1093,13 @@ BuildScreen
           ora VIC_SPRITE_ENABLE
           sta VIC_SPRITE_ENABLE
           
+          ;initialise enemy values
           lda #SPRITE_PLAYER
           sta SPRITE_POINTER_BASE,x
+          
+          ;look right per default
+          lda #0
+          sta SPRITE_DIRECTION,x
           
 .NoFreeSlot                    
           jmp .NextLevelData
@@ -1141,8 +1270,8 @@ LEVEL_1
           !byte LD_LINE_H,10,19,20,96,13
           !byte LD_LINE_V,7,6,4,128,9
           !byte LD_OBJECT,5,4,TYPE_PLAYER
-          !byte LD_OBJECT,34,11,TYPE_ENEMY
-          !byte LD_OBJECT,10,18,TYPE_ENEMY
+          !byte LD_OBJECT,34,11,TYPE_ENEMY_LR
+          !byte LD_OBJECT,10,18,TYPE_ENEMY_UD
           !byte LD_END
 
 
@@ -1187,6 +1316,18 @@ SPRITE_POS_Y
           !byte 0,0,0,0,0,0,0,0
 SPRITE_ACTIVE
           !byte 0,0,0,0,0,0,0,0
+SPRITE_DIRECTION
+          !byte 0,0,0,0,0,0,0,0
+
+ENEMY_BEHAVIOUR_TABLE_LO          
+          !byte <PlayerControl
+          !byte <BehaviourDumbEnemyLR
+          !byte <BehaviourDumbEnemyUD
+          
+ENEMY_BEHAVIOUR_TABLE_HI
+          !byte >PlayerControl
+          !byte >BehaviourDumbEnemyLR
+          !byte >BehaviourDumbEnemyUD
           
 BIT_TABLE
           !byte 1,2,4,8,16,32,64,128
