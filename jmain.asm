@@ -297,6 +297,13 @@ GT_COOP                 = 2
           lda #$18
           sta $d016
           
+          ;initialise music player
+          lda #15
+          sta 53248
+          
+          lda #0
+          jsr MUSIC_PLAYER
+          
 ;------------------------------------------------------------
 ;the title screen game loop
 ;------------------------------------------------------------
@@ -4852,6 +4859,9 @@ TITLE_LOGO_SCREEN_CHAR
         !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
         !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 
+* = $3000
+MUSIC_PLAYER
+!binary "gt2music.bin"
 
 !zone LevelLineV          
 LevelLineV
@@ -5382,6 +5392,8 @@ WaitFrame
           cmp #$F8
           bne .WaitStep2
           
+          ;play music
+          jsr MUSIC_PLAYER + 3
           rts
 
 
