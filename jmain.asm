@@ -270,6 +270,7 @@ SPRITE_BOSS_ARM_L             = SPRITE_BASE + 139
 SPRITE_BOSS_TORSO_R           = SPRITE_BASE + 140
 SPRITE_BOSS_TORSO_L           = SPRITE_BASE + 141
 SPRITE_BOSS_HEAD              = SPRITE_BASE + 142
+SPRITE_BOSS_HEAD_HURT         = SPRITE_BASE + 143
 
 SPRITE_G                      = SPRITE_BASE + 144
 SPRITE_E                      = SPRITE_BASE + 145
@@ -10051,6 +10052,8 @@ BOSS_MOVE_SPEED = 1
           sta SPRITE_STATE,x
           lda #2
           sta VIC_SPRITE_COLOR,x
+          lda #SPRITE_BOSS_HEAD
+          sta SPRITE_POINTER_BASE,x
         
 .NoHitBack        
 
@@ -10661,8 +10664,6 @@ FinalAttack
           jsr DrawBeamHSegment
           rts
           
-
-
 ;PARAM1 = beam h char
 ;PARAM2 = beam color
 ;PARAM3 = x char pos
@@ -10857,8 +10858,62 @@ BehaviourBossHelper
           sta VIC_SPRITE_COLOR,x
         
 .NoHitBack        
-          rts
+          jsr GenerateRandomNumber
+          and #$03
+          bne .DoY
+          
+          inc SPRITE_MOVE_POS,x
+          lda SPRITE_MOVE_POS,x
+          and #$0f
+          sta SPRITE_MOVE_POS,x
+          ldy SPRITE_MOVE_POS,x
+          lda BOSS_DELTA_TABLE_X,y
+          beq .DoY
+          sta PARAM1
+          
+          bmi .Left
+          
+.Right          
+          jsr MoveSpriteRight
+          dec PARAM1
+          bne .Right
+          jmp .DoY
+          
+.Left
+          jsr MoveSpriteLeft
+          inc PARAM1
+          bne .Left
+          
+.DoY          
+          jsr GenerateRandomNumber
+          and #$03
+          bne .Done
 
+          inc SPRITE_MOVE_POS_Y,x
+          lda SPRITE_MOVE_POS_Y,x
+          and #$0f
+          sta SPRITE_MOVE_POS_Y,x
+
+          ldy SPRITE_MOVE_POS_Y,x
+          lda BOSS_DELTA_TABLE_Y,y
+          beq .Done
+          sta PARAM1
+          
+          bmi .Up
+          
+.Down
+          jsr MoveSpriteDown
+          dec PARAM1
+          bne .Down
+          jmp .Done
+          
+.Up
+          jsr MoveSpriteUp
+          inc PARAM1
+          bne .Up
+          
+.Done
+          rts
 
 
 ;------------------------------------------------------------
@@ -10966,7 +11021,17 @@ HitBehaviourHurt
           lda TYPE_ANNOYED_COLOR,y
           sta VIC_SPRITE_COLOR,x
           rts
-          
+
+
+;------------------------------------------------------------
+;hit behaviour getting hurt
+;------------------------------------------------------------
+!zone HitBehaviourBoss7
+HitBehaviourBoss7
+          lda #SPRITE_BOSS_HEAD_HURT
+          sta SPRITE_POINTER_BASE,x
+          jmp HitBehaviourHurt
+
  
 ;------------------------------------------------------------
 ;hit behaviour for boss
@@ -13531,7 +13596,7 @@ ENEMY_HIT_BEHAVIOUR_TABLE_LO
           !byte <HitBehaviourHurt     ;boss 4
           !byte <HitBehaviourHurt     ;boss 5
           !byte <HitBehaviourHurt     ;boss 6
-          !byte <HitBehaviourHurt     ;boss 7
+          !byte <HitBehaviourBoss7    ;boss 7
           !byte <HitBehaviourBossHelper
           
           
@@ -14384,6 +14449,12 @@ MOVE_BORDER_BOTTOM
           !byte 23
 BOSS_PARTS_KILLED
           !byte 0
+          
+BOSS_DELTA_TABLE_X
+          !byte 0, 1, 0, 1, 1, 0, 1, 0
+BOSS_DELTA_TABLE_Y          
+          !byte 0, $ff, 0, $ff, $ff, 0, $ff, 0
+          !byte 0, 1, 0, 1, 1, 0, 1, 0
           
 !source "level_data.asm"
 
