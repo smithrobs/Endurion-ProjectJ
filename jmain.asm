@@ -48,8 +48,8 @@ CIA_PRA                 = $dd00
 
 PROCESSOR_PORT          = $01
 
-START_LEVEL             = 0
-;START_LEVEL             = 70
+;START_LEVEL             = 0
+START_LEVEL             = 70
 
 MUSIC_IN_GAME_TUNE		    = $00
 MUSIC_TITLE_TUNE			     = $01
@@ -1748,7 +1748,7 @@ HandleFinalBossIntro
           ;torso
           lda #19
           sta PARAM1
-          lda #11
+          lda #10
           sta PARAM2
           lda #TYPE_BOSS5
           sta PARAM3
@@ -2504,31 +2504,9 @@ CheckCollisions
           
 .PlayerCollidedWithEnemy          
           ;player killed
-          ldx PARAM6
-          lda #129
-          sta SPRITE_STATE,x
+          ldy PARAM6
           
-          lda #SPRITE_PLAYER_DEAD
-          sta SPRITE_POINTER_BASE,x
-          
-          lda #0
-          sta SPRITE_MOVE_POS,x
-          
-          lda SPRITE_ACTIVE,x
-          cmp #TYPE_PLAYER_SAM
-          bne .PlayerWasDean
-          
-          ;reset Sam specific variables
-          lda SPRITE_HELD
-          beq +
- 
-          jsr RemoveForceBeam
-          ldx PARAM6
-          lda #0
-          sta SPRITE_HELD
- +
- 
-.PlayerWasDean          
+          jsr KillPlayer
           rts
           
 
@@ -4845,6 +4823,27 @@ ObjectMoveDownBlockingNoPlatform
           rts
           
 
+;------------------------------------------------------------
+;move object down
+;x = object index
+;------------------------------------------------------------
+!zone ObjectMoveDown
+ObjectMoveDown
+          
+          inc SPRITE_CHAR_POS_Y_DELTA,x
+          
+          lda SPRITE_CHAR_POS_Y_DELTA,x
+          cmp #8
+          bne .NoCharStep
+          
+          lda #0
+          sta SPRITE_CHAR_POS_Y_DELTA,x
+          inc SPRITE_CHAR_POS_Y,x
+          
+.NoCharStep          
+          jsr MoveSpriteDown
+          rts
+
 
           
 
@@ -5099,29 +5098,6 @@ SCREEN_BACK_LINE_OFFSET_TABLE_HI
 * = $3000
 MUSIC_PLAYER
 !binary "music.bin",,2
-
-
-;------------------------------------------------------------
-;move object down
-;x = object index
-;------------------------------------------------------------
-!zone ObjectMoveDown
-ObjectMoveDown
-          
-          inc SPRITE_CHAR_POS_Y_DELTA,x
-          
-          lda SPRITE_CHAR_POS_Y_DELTA,x
-          cmp #8
-          bne .NoCharStep
-          
-          lda #0
-          sta SPRITE_CHAR_POS_Y_DELTA,x
-          inc SPRITE_CHAR_POS_Y,x
-          
-.NoCharStep          
-          jsr MoveSpriteDown
-          rts
-
 
 
 ;------------------------------------------------------------
@@ -7649,6 +7625,13 @@ CheckIsPlayerCollidingWithBeam
           
 .PlayerHit          
           ;player killed
+          jsr KillPlayer
+          rts
+
+
+;kills player (index y)
+!zone KillPlayer
+KillPlayer
           lda #129
           sta SPRITE_STATE,y
           
@@ -7663,12 +7646,12 @@ CheckIsPlayerCollidingWithBeam
           bne .PlayerWasDean
           
           ;reset Sam specific variables
+          jsr RemoveForceBeam
           lda #0
           sta SPRITE_HELD
           
-.PlayerWasDean          
+.PlayerWasDean         
           rts
-
 
 ;------------------------------------------------------------
 ;check player vs. beam
@@ -7724,24 +7707,7 @@ CheckIsPlayerCollidingWithBeamV
           
 .PlayerHit          
           ;player killed
-          lda #129
-          sta SPRITE_STATE,y
-          
-          lda #SPRITE_PLAYER_DEAD
-          sta SPRITE_POINTER_BASE,y
-          
-          lda #0
-          sta SPRITE_MOVE_POS,y
-          
-          lda SPRITE_ACTIVE,y
-          cmp #TYPE_PLAYER_SAM
-          bne .PlayerWasDean
-          
-          ;reset Sam specific variables
-          lda #0
-          sta SPRITE_HELD
-          
-.PlayerWasDean          
+          jsr KillPlayer
           rts
 
 
@@ -7807,24 +7773,7 @@ CheckIsPlayerCollidingWithDiagonalBeam
           
 .PlayerHit          
           ;player killed
-          lda #129
-          sta SPRITE_STATE,y
-          
-          lda #SPRITE_PLAYER_DEAD
-          sta SPRITE_POINTER_BASE,y
-          
-          lda #0
-          sta SPRITE_MOVE_POS,y
-          
-          lda SPRITE_ACTIVE,y
-          cmp #TYPE_PLAYER_SAM
-          bne .PlayerWasDean
-          
-          ;reset Sam specific variables
-          lda #0
-          sta SPRITE_HELD
-          
-.PlayerWasDean          
+          jsr KillPlayer
           rts
 
 
@@ -8147,6 +8096,75 @@ RestoreBeamHV
           bne .NextLineR
 
           ldx PARAM10
+          rts
+
+
+;PARAM3 = x char pos
+;PARAM4 = y char pos
+;PARAM5 = x end pos
+!zone RestoreBeamHSegment
+RestoreBeamHSegment
+          ldy PARAM4
+          
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          sta ZEROPAGE_POINTER_2
+          sta ZEROPAGE_POINTER_3
+          sta ZEROPAGE_POINTER_4
+          lda SCREEN_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+          sec
+          sbc #( ( SCREEN_CHAR - SCREEN_BACK_CHAR ) >> 8 )
+          sta ZEROPAGE_POINTER_2 + 1
+          clc
+          adc #( ( SCREEN_COLOR - SCREEN_BACK_CHAR ) >> 8 )
+          sta ZEROPAGE_POINTER_3 + 1
+          sec
+          sbc #( ( SCREEN_COLOR - SCREEN_BACK_COLOR ) >> 8 )
+          sta ZEROPAGE_POINTER_4 + 1
+          
+          ldy PARAM3
+-
+          lda (ZEROPAGE_POINTER_2),y
+          sta (ZEROPAGE_POINTER_1),y
+          lda (ZEROPAGE_POINTER_4),y
+          sta (ZEROPAGE_POINTER_3),y
+          cpy PARAM5
+          beq +
+          iny
+          jmp -
++
+          rts
+
+;PARAM1 = beam h char
+;PARAM2 = beam color
+;PARAM3 = x char pos
+;PARAM4 = y char pos
+;PARAM5 = x end pos
+!zone DrawBeamHSegment
+DrawBeamHSegment
+          ldy PARAM4
+          
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          sta ZEROPAGE_POINTER_2
+          lda SCREEN_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+          clc
+          adc #( ( SCREEN_COLOR - SCREEN_CHAR ) >> 8 )
+          sta ZEROPAGE_POINTER_2 + 1
+          
+          ldy PARAM3
+.HLoop          
+          lda PARAM1
+          sta (ZEROPAGE_POINTER_1),y
+          lda PARAM2
+          sta (ZEROPAGE_POINTER_2),y
+          cpy PARAM5
+          beq +
+          iny
+          jmp .HLoop
++          
           rts
 
 
@@ -9732,16 +9750,28 @@ BOSS_MOVE_SPEED = 1
 ;------------------------------------------------------------
 ;boss #7
 ;state = 0 -> random movements
+;state = 1 -> attack with beams
 ;------------------------------------------------------------
 !zone BehaviourBoss7
 BehaviourBoss7
 BOSS_MOVE_SPEED = 1
           lda SPRITE_STATE,x
           beq .RandomMovements
+          cmp #1
+          bne +
+          jmp .AttackWithBeams
 
-
++
 
 .RandomMovements
+          inc SPRITE_MODE_POS,x
+          bne +
+          ;attack mode
+          lda #1
+          sta SPRITE_STATE,x
+          rts
+
++
           lda SPRITE_MOVE_POS,x
           bne .DoMove
           
@@ -9820,6 +9850,115 @@ BOSS_MOVE_SPEED = 1
           rts
 
 
+.AttackWithBeams
+          inc SPRITE_MOVE_POS,x
+          lda SPRITE_MOVE_POS,x
+          and #$03
+          beq +
+          rts
++
+
+
+          inc SPRITE_MODE_POS,x
+          
+          lda SPRITE_MODE_POS,x
+          cmp #11
+          bcc .BeamNotDangerous
+          cmp #29
+          bcs .BeamNotDangerous
+          
+          ;does player hit beam?
+          ldy #0
+          jsr CheckIsPlayerCollidingWithBeam
+          ldy #1
+          jsr CheckIsPlayerCollidingWithBeam
+          
+.BeamNotDangerous          
+          lda SPRITE_MODE_POS,x
+          cmp #5
+          beq .BeamStep1
+          cmp #6
+          beq .BeamStep2
+          cmp #7
+          beq .BeamStep3
+          cmp #8
+          beq .BeamStep4
+          cmp #9
+          beq .BeamStep3
+          cmp #10
+          beq .BeamStep4
+          cmp #11
+          beq .BeamStep3
+          cmp #12
+          bne +
+          lda #0
+          sta SPRITE_STATE,x
+          sta SPRITE_MODE_POS,x
+          ;remove beam
+          lda #0
+          sta PARAM3
+          lda SPRITE_CHAR_POS_Y,x
+          clc 
+          adc #3
+          sta PARAM4
+          lda #39
+          sta PARAM5
+          jsr RestoreBeamHSegment
+          rts
+          
++          
+
+.HandleBeam
+          ;PARAM1 = beam h char
+          ;PARAM2 = beam color
+          ;PARAM3 = x char pos
+          ;PARAM4 = y char pos
+          ;PARAM5 = x end pos
+          lda BEAM_CHAR_H,y
+          sta PARAM1
+          lda BEAM_COLOR,y
+          sta PARAM2
+          lda #0
+          sta PARAM3
+          lda SPRITE_CHAR_POS_Y,x
+          clc 
+          adc #3
+          sta PARAM4
+          lda SPRITE_CHAR_POS_X,x
+          sec
+          sbc #2
+          sta PARAM5
+          jsr DrawBeamHSegment
+
+          lda SPRITE_CHAR_POS_X,x
+          clc
+          adc #2
+          sta PARAM3
+          lda #39
+          sta PARAM5
+          jsr DrawBeamHSegment
+          rts
+
+.BeamStep1
+          ;beam
+          ldy #BEAM_TYPE_DARK
+          jmp .HandleBeam
+          
+.BeamStep2
+          ;beam
+          ldy #BEAM_TYPE_MEDIUM
+          jmp .HandleBeam
+          
+.BeamStep3
+          ;beam
+          ldy #BEAM_TYPE_LIGHT
+          jmp .HandleBeam
+          
+.BeamStep4
+          ;beam
+          ldy #BEAM_TYPE_LIGHT2
+          jmp .HandleBeam
+          
 
 ;------------------------------------------------------------
 ;boss helper
