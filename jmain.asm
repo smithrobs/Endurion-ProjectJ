@@ -28,7 +28,7 @@ JOYSTICK_PORT_II        = $dc00
 
 CIA_PRA                 = $dd00
 
-START_LEVEL             = 20
+START_LEVEL             = 22
 
 
 ;placeholder for various temp parameters
@@ -208,6 +208,20 @@ SPRITE_EYE_2                  = SPRITE_BASE + 113
 SPRITE_EYE_3                  = SPRITE_BASE + 114
 SPRITE_EYE_4                  = SPRITE_BASE + 115
 
+SPRITE_HAND_1                 = SPRITE_BASE + 116
+SPRITE_HAND_2                 = SPRITE_BASE + 117
+SPRITE_HAND_3                 = SPRITE_BASE + 118
+SPRITE_HAND_4                 = SPRITE_BASE + 119
+SPRITE_HAND_5                 = SPRITE_BASE + 120
+SPRITE_HAND_6                 = SPRITE_BASE + 121
+
+SPRITE_DEVIL_WALK_R_1         = SPRITE_BASE + 122
+SPRITE_DEVIL_WALK_L_1         = SPRITE_BASE + 123
+SPRITE_DEVIL_WALK_R_2         = SPRITE_BASE + 124
+SPRITE_DEVIL_WALK_L_2         = SPRITE_BASE + 125
+SPRITE_DEVIL_WALK_R_3         = SPRITE_BASE + 126
+SPRITE_DEVIL_WALK_L_3         = SPRITE_BASE + 127
+
 ;offset from calculated char pos to true sprite pos
 SPRITE_CENTER_OFFSET_X  = 8
 SPRITE_CENTER_OFFSET_Y  = 11
@@ -256,6 +270,8 @@ TYPE_FLOATING_GHOST     = 15
 TYPE_FLY                = 16
 TYPE_SLIME              = 17
 TYPE_FRANKENSTEIN       = 18
+TYPE_HAND               = 19
+TYPE_DEVIL              = 20
 
 OBJECT_HEIGHT           = 8 * 2
 
@@ -3819,6 +3835,115 @@ BehaviourMummy
 ;------------------------------------------------------------
 ;simply walk left/right, don't fall off
 ;------------------------------------------------------------
+!zone BehaviourDevil
+BehaviourDevil
+          lda SPRITE_HITBACK,x
+          beq .NoHitBack
+
+          dec SPRITE_HITBACK,x
+          lda SPRITE_HITBACK_DIRECTION,x
+          beq .HitBackRight
+          
+          ;move left
+          jsr ObjectMoveLeftBlocking
+          rts
+          
+.HitBackRight          
+          jsr ObjectMoveRightBlocking
+          rts
+          
+.NoHitBack          
+          jsr ObjectMoveDownBlocking
+          beq .NotFalling
+          rts
+          
+.NotFalling          
+          inc SPRITE_ANIM_DELAY,x
+          lda SPRITE_ANIM_DELAY,x
+          cmp #8
+          bne .NoAnimUpdate
+          
+          lda #0
+          sta SPRITE_ANIM_DELAY,x
+          
+          inc SPRITE_ANIM_POS,x
+          lda SPRITE_ANIM_POS,x
+          cmp #3
+          bne .NoWrap
+          lda #0
+.NoWrap          
+          sta SPRITE_ANIM_POS,x
+          
+          clc
+          asl
+          adc SPRITE_DIRECTION,x
+          adc #SPRITE_DEVIL_WALK_R_1
+          sta SPRITE_POINTER_BASE,x
+
+.NoAnimUpdate
+          lda SPRITE_CHAR_POS_Y,x
+          cmp SPRITE_CHAR_POS_Y
+          bne .NoPlayerInSight
+          
+          ;player on same height
+          ;looking at the player?
+          jsr LookingAtPlayer
+          beq .NoPlayerInSight
+
+          lda SPRITE_DIRECTION,x
+          beq .AttackRight
+          
+          ;attack to left
+          jsr ObjectMoveLeftBlocking
+          jsr ObjectMoveLeftBlocking
+          beq .ToggleDirection
+          rts
+          
+.AttackRight
+          ;attack to left
+          jsr ObjectMoveRightBlocking
+          jsr ObjectMoveRightBlocking
+          beq .ToggleDirection
+          rts
+
+.NoPlayerInSight
+          lda DELAYED_GENERIC_COUNTER
+          and #$03
+          beq .MovementUpdate
+          rts
+          
+.MovementUpdate
+          inc SPRITE_MOVE_POS,x
+          lda SPRITE_MOVE_POS,x
+          and #$03
+          sta SPRITE_MOVE_POS,x
+          
+          lda SPRITE_DIRECTION,x
+          beq .MoveRight
+          
+          ;move left
+          jsr ObjectWalkLeft
+          beq .ToggleDirection
+          rts
+          
+.MoveRight
+          jsr ObjectWalkRight
+          beq .ToggleDirection
+          rts
+          
+.ToggleDirection
+          lda SPRITE_DIRECTION,x
+          eor #1
+          sta SPRITE_DIRECTION,x
+          clc
+          adc #SPRITE_DEVIL_WALK_R_1
+          sta SPRITE_POINTER_BASE,x
+          rts
+ 
+ 
+;------------------------------------------------------------
+;simply walk left/right, don't fall off
+;------------------------------------------------------------
 !zone BehaviourZombie
 BehaviourZombie
           lda SPRITE_HITBACK,x
@@ -4609,117 +4734,6 @@ BehaviourJumpingToad
           rts
  
  
-;------------------------------------------------------------
-;run left/right, jump off directional
-;------------------------------------------------------------
-!zone BehaviourSpider
-BehaviourSpider
-          lda SPRITE_HITBACK,x
-          beq .NoHitBack
-
-          dec SPRITE_HITBACK,x
-          lda SPRITE_HITBACK_DIRECTION,x
-          beq .HitBackRight
-          
-          ;move left
-          jsr ObjectMoveLeftBlocking
-          rts
-          
-.HitBackRight          
-          jsr ObjectMoveRightBlocking
-          rts
-          
-.NoHitBack          
-          ;animate spider
-          inc SPRITE_ANIM_DELAY,x
-          lda SPRITE_ANIM_DELAY,x
-          cmp #2
-          bne .NoAnimUpdate
-          
-          lda #0
-          sta SPRITE_ANIM_DELAY,x
-          
-          inc SPRITE_ANIM_POS,x
-          lda SPRITE_ANIM_POS,x
-          and #$03
-          sta SPRITE_ANIM_POS,x
-          
-          tay
-          lda SPIDER_ANIMATION_TABLE,y
-          sta SPRITE_POINTER_BASE,x
-          
-.NoAnimUpdate          
-          lda SPRITE_JUMP_POS,x
-          bne .NoFallHandling
-          
-          jsr UpdateSpriteFall
-          sta SPRITE_FALLING,x
-          
-          bne .IsFalling
-          
-          ;neither jumping nor falling
-          jsr GenerateRandomNumber
-          and #$0f
-          cmp #02
-          bpl .IsFalling
-          
-          ;random jump
-          jmp .Jumping
-          
-.IsFalling          
-.NoFallHandling
-
-          lda #3
-          sta PARAM6
-.MoveStep
-          dec PARAM6
-          beq .MoveDone
-
-          lda SPRITE_DIRECTION,x
-          beq .MoveRight
-          
-          ;move left
-          lda SPRITE_JUMP_POS,x
-          ora SPRITE_FALLING,x
-          bne .OnlyMoveLeft
-          
-          jsr ObjectWalkOrJumpLeft
-          beq .ToggleDirection
-          jmp .MoveStep
-
-.MoveDone
-          lda SPRITE_JUMP_POS,x
-          beq .NotJumping
-          
-.Jumping          
-          jsr UpdateSpriteJump
-.NotJumping          
-          rts
-          
-.OnlyMoveLeft
-          jsr ObjectMoveLeftBlocking
-          beq .ToggleDirection
-          jmp .MoveStep
-          
-.MoveRight
-          lda SPRITE_JUMP_POS,x
-          ora SPRITE_FALLING,x
-          bne .OnlyMoveRight
-          
-          jsr ObjectWalkOrJumpRight
-          beq .ToggleDirection
-          jmp .MoveStep
-
-.OnlyMoveRight
-          jsr ObjectMoveRightBlocking
-          beq .ToggleDirection
-          jmp .MoveStep
-
-.ToggleDirection
-          lda SPRITE_DIRECTION,x
-          eor #1
-          sta SPRITE_DIRECTION,x
-          jmp .MoveStep
           
  
 ;place the data at a valid bitmap position, this avoids copying the data        
@@ -4917,6 +4931,120 @@ SCREEN_BACK_LINE_OFFSET_TABLE_HI
 * = $3000
 MUSIC_PLAYER
 !binary "gt2music.bin"
+
+
+;------------------------------------------------------------
+;run left/right, jump off directional
+;------------------------------------------------------------
+!zone BehaviourSpider
+BehaviourSpider
+          lda SPRITE_HITBACK,x
+          beq .NoHitBack
+
+          dec SPRITE_HITBACK,x
+          lda SPRITE_HITBACK_DIRECTION,x
+          beq .HitBackRight
+          
+          ;move left
+          jsr ObjectMoveLeftBlocking
+          rts
+          
+.HitBackRight          
+          jsr ObjectMoveRightBlocking
+          rts
+          
+.NoHitBack          
+          ;animate spider
+          inc SPRITE_ANIM_DELAY,x
+          lda SPRITE_ANIM_DELAY,x
+          cmp #2
+          bne .NoAnimUpdate
+          
+          lda #0
+          sta SPRITE_ANIM_DELAY,x
+          
+          inc SPRITE_ANIM_POS,x
+          lda SPRITE_ANIM_POS,x
+          and #$03
+          sta SPRITE_ANIM_POS,x
+          
+          tay
+          lda SPIDER_ANIMATION_TABLE,y
+          sta SPRITE_POINTER_BASE,x
+          
+.NoAnimUpdate          
+          lda SPRITE_JUMP_POS,x
+          bne .NoFallHandling
+          
+          jsr UpdateSpriteFall
+          sta SPRITE_FALLING,x
+          
+          bne .IsFalling
+          
+          ;neither jumping nor falling
+          jsr GenerateRandomNumber
+          and #$0f
+          cmp #02
+          bpl .IsFalling
+          
+          ;random jump
+          jmp .Jumping
+          
+.IsFalling          
+.NoFallHandling
+
+          lda #3
+          sta PARAM6
+.MoveStep
+          dec PARAM6
+          beq .MoveDone
+
+          lda SPRITE_DIRECTION,x
+          beq .MoveRight
+          
+          ;move left
+          lda SPRITE_JUMP_POS,x
+          ora SPRITE_FALLING,x
+          bne .OnlyMoveLeft
+          
+          jsr ObjectWalkOrJumpLeft
+          beq .ToggleDirection
+          jmp .MoveStep
+
+.MoveDone
+          lda SPRITE_JUMP_POS,x
+          beq .NotJumping
+          
+.Jumping          
+          jsr UpdateSpriteJump
+.NotJumping          
+          rts
+          
+.OnlyMoveLeft
+          jsr ObjectMoveLeftBlocking
+          beq .ToggleDirection
+          jmp .MoveStep
+          
+.MoveRight
+          lda SPRITE_JUMP_POS,x
+          ora SPRITE_FALLING,x
+          bne .OnlyMoveRight
+          
+          jsr ObjectWalkOrJumpRight
+          beq .ToggleDirection
+          jmp .MoveStep
+
+.OnlyMoveRight
+          jsr ObjectMoveRightBlocking
+          beq .ToggleDirection
+          jmp .MoveStep
+
+.ToggleDirection
+          lda SPRITE_DIRECTION,x
+          eor #1
+          sta SPRITE_DIRECTION,x
+          jmp .MoveStep
+
 
 
 ;------------------------------------------------------------
@@ -5200,6 +5328,67 @@ BehaviourFrankenstein
           rts
           
  
+;------------------------------------------------------------
+;simply appear and hide again
+;state 128 = invisible
+;      0 = rising/hiding
+;------------------------------------------------------------
+!zone BehaviourHand
+BehaviourHand
+          lda DELAYED_GENERIC_COUNTER
+          and #$03
+          beq .MovementUpdate
+.NoMovement          
+          rts
+
+.MovementUpdate
+          lda SPRITE_STATE,x
+          bne .HiddenState
+
+          inc SPRITE_ANIM_DELAY,x
+          lda SPRITE_ANIM_DELAY,x
+          cmp #3
+          bne .NoMovement
+          
+          lda #0
+          sta SPRITE_ANIM_DELAY,x
+          
+          inc SPRITE_ANIM_POS,x
+          lda SPRITE_ANIM_POS,x
+          cmp #6
+          beq .EnterHiddenState
+          
+.UpdateHandSprite          
+          ldy SPRITE_ANIM_POS,x
+          lda HAND_ANIM_TABLE,y
+          sta SPRITE_POINTER_BASE,x
+          lda HAND_COLOR_TABLE,y
+          sta VIC_SPRITE_COLOR,x
+          rts
+          
+.EnterHiddenState
+          lda #SPRITE_INVISIBLE
+          sta SPRITE_POINTER_BASE,x
+          
+          jsr GenerateRandomNumber
+          sta SPRITE_MOVE_POS,x
+          
+          lda #128
+          sta SPRITE_STATE,x
+.StillHidden
+          rts
+          
+.HiddenState
+          dec SPRITE_MOVE_POS,x
+          bne .StillHidden
+          
+          ;unhiding
+          lda #0
+          sta SPRITE_STATE,x
+          sta SPRITE_ANIM_DELAY,x
+          sta SPRITE_ANIM_POS,x
+          jmp .UpdateHandSprite          
+          
 ;------------------------------------------------------------
 ;move randomly diagonal
 ;------------------------------------------------------------
@@ -7929,6 +8118,8 @@ ENEMY_BEHAVIOUR_TABLE_LO
           !byte <BehaviourFly
           !byte <BehaviourSlime
           !byte <BehaviourFrankenstein
+          !byte <BehaviourHand
+          !byte <BehaviourDevil
           
 ENEMY_BEHAVIOUR_TABLE_HI
           !byte >PlayerControl
@@ -7949,6 +8140,8 @@ ENEMY_BEHAVIOUR_TABLE_HI
           !byte >BehaviourFly
           !byte >BehaviourSlime
           !byte >BehaviourFrankenstein
+          !byte >BehaviourHand
+          !byte >BehaviourDevil
           
 ;behaviour for an enemy being hit          
 ENEMY_HIT_BEHAVIOUR_TABLE_LO          
@@ -7969,6 +8162,8 @@ ENEMY_HIT_BEHAVIOUR_TABLE_LO
           !byte <HitBehaviourHurt     ;fly
           !byte <HitBehaviourHurt     ;slime
           !byte <HitBehaviourHurt     ;frankenstein
+          !byte <HitBehaviourHurt     ;hand
+          !byte <HitBehaviourHurt     ;devil
           
 ENEMY_HIT_BEHAVIOUR_TABLE_HI
           !byte >HitBehaviourHurt     ;bat diagonal
@@ -7988,6 +8183,8 @@ ENEMY_HIT_BEHAVIOUR_TABLE_HI
           !byte >HitBehaviourHurt     ;fly
           !byte >HitBehaviourHurt     ;slime
           !byte >HitBehaviourHurt     ;frankenstein
+          !byte >HitBehaviourHurt     ;hand
+          !byte >HitBehaviourHurt     ;devil
           
 IS_TYPE_ENEMY
           !byte 0     ;dummy entry for inactive object
@@ -8009,6 +8206,8 @@ IS_TYPE_ENEMY
           !byte 1     ;fly
           !byte 1     ;slime
           !byte 1     ;frankenstein
+          !byte 1     ;hand
+          !byte 1     ;devil
           
 TYPE_START_SPRITE
           !byte 0     ;dummy entry for inactive object
@@ -8029,7 +8228,9 @@ TYPE_START_SPRITE
           !byte SPRITE_INVISIBLE
           !byte SPRITE_FLY_1
           !byte SPRITE_SLIME_R_1
-          !byte SPRITE_INVISIBLE
+          !byte SPRITE_INVISIBLE        ;frankie
+          !byte SPRITE_INVISIBLE        ;hand
+          !byte SPRITE_DEVIL_WALK_R_1   ;devil
           
 TYPE_START_COLOR
           !byte 0
@@ -8051,6 +8252,8 @@ TYPE_START_COLOR
           !byte 3     ;fly
           !byte 5     ;slime
           !byte 10    ;frankenstein
+          !byte 7     ;hand
+          !byte 7     ;devil
           
 TYPE_START_MULTICOLOR
           !byte 0     ;dummy
@@ -8072,6 +8275,8 @@ TYPE_START_MULTICOLOR
           !byte 1     ;fly
           !byte 1     ;slime
           !byte 1     ;frankenstein
+          !byte 1     ;hand
+          !byte 0     ;devil
           
 TYPE_START_HP
           !byte 0     ;dummy
@@ -8093,6 +8298,8 @@ TYPE_START_HP
           !byte 1     ;fly
           !byte 3     ;slime
           !byte 7     ;frankenstein
+          !byte 1     ;hand
+          !byte 2     ;devil
           
 TYPE_ANNOYED_COLOR
           !byte 0     ;dummy
@@ -8114,6 +8321,8 @@ TYPE_ANNOYED_COLOR
           !byte 3     ;fly
           !byte 13    ;slime
           !byte 13    ;frankenstein
+          !byte 13    ;hand
+          !byte 8     ;devil
           
           
 ;enemy start direction, 2 bits per dir.
@@ -8151,6 +8360,8 @@ TYPE_START_DIRECTION
           !byte %00011111     ;fly
           !byte %00000010     ;fsline
           !byte %00010010     ;frankenstein
+          !byte %00010000     ;hand
+          !byte %00010010     ;devil
           
 TYPE_START_STATE
           !byte 0             ;dummy
@@ -8172,6 +8383,7 @@ TYPE_START_STATE
           !byte 0             ;fly
           !byte 0             ;slime
           !byte 128           ;frankenstein
+          !byte 128           ;hand
           
 BAT_ANIMATION
           !byte SPRITE_BAT_1
@@ -8225,6 +8437,15 @@ FLOATING_GHOST_ANIMATION_TABLE
           !byte SPRITE_FLOATING_GHOST_3
           !byte SPRITE_FLOATING_GHOST_2
           
+HAND_ANIM_TABLE
+          !byte SPRITE_HAND_1
+          !byte SPRITE_HAND_2
+          !byte SPRITE_HAND_3
+          !byte SPRITE_HAND_4
+          !byte SPRITE_HAND_5
+          !byte SPRITE_HAND_6
+HAND_COLOR_TABLE
+          !byte 7,13,13,5,5,5
 
 PATH_8_DX
           !byte $86
@@ -8447,6 +8668,8 @@ SCREEN_DATA_TABLE
           !word LEVEL_19
           !word LEVEL_20
           !word LEVEL_21
+          !word LEVEL_22
+          !word LEVEL_23
           !word 0
           
 LEVEL_1
@@ -8898,6 +9121,50 @@ LEVEL_21
           !byte LD_SPAWN_SPOT,32,4,TYPE_FRANKENSTEIN,5
           !byte LD_SPAWN_SPOT,32,9,TYPE_FRANKENSTEIN,5
           !byte LD_SPAWN_SPOT,32,14,TYPE_FRANKENSTEIN,5
+          !byte LD_END
+
+LEVEL_22
+          !byte LD_QUAD,3,3,2
+          
+          !byte LD_QUAD,6,3,1
+          !byte LD_LINE_H_ALT,4,5,6,160,13
+          !byte LD_QUAD,6,8,1
+          !byte LD_LINE_H_ALT,4,10,6,160,13
+          !byte LD_QUAD,6,13,1
+          !byte LD_LINE_H_ALT,4,15,6,160,13
+          !byte LD_QUAD,32,3,1
+          !byte LD_LINE_H_ALT,30,5,6,160,13
+          !byte LD_QUAD,32,8,1
+          !byte LD_LINE_H_ALT,30,10,6,160,13
+          !byte LD_QUAD,32,13,1
+          !byte LD_LINE_H_ALT,30,15,6,160,13
+          
+          !byte LD_OBJECT,18,21,TYPE_PLAYER_DEAN
+          !byte LD_OBJECT,21,21,TYPE_PLAYER_SAM
+          
+          !byte LD_OBJECT,6,21,TYPE_HAND
+          !byte LD_OBJECT,29,21,TYPE_HAND
+          !byte LD_END
+
+LEVEL_23
+          !byte LD_LINE_H,5,5,10,160,13
+          !byte LD_LINE_H,12,7,8,160,13
+          !byte LD_LINE_H,30,12,9,161,13
+          !byte LD_LINE_H_ALT,10,19,20,160,13
+          !byte LD_LINE_V_ALT,7,6,4,192,9
+          !byte LD_LINE_H,19,8,3,160,13
+          !byte LD_LINE_H,24,10,4,160,13
+          !byte LD_LINE_H,20,11,4,160,13
+          !byte LD_QUAD,20,4,0
+          !byte LD_QUAD,25,6,0
+          !byte LD_LINE_H,16,12,4,160,13
+          !byte LD_LINE_H,12,13,4,160,13
+          !byte LD_LINE_H,8,14,4,160,13
+          !byte LD_LINE_H,6,16,5,160,13
+          !byte LD_OBJECT,5,4,TYPE_PLAYER_DEAN
+          !byte LD_OBJECT,34,4,TYPE_PLAYER_SAM
+          !byte LD_OBJECT,20,18,TYPE_DEVIL
+          !byte LD_AREA,2,8,7,5,160,13
           !byte LD_END
 
 
