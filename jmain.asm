@@ -183,6 +183,8 @@ OBJECT_HEIGHT           = 8 * 2
 
 GameLoop  
           jsr WaitFrame
+          
+          jsr DeadControl
 
           jsr ObjectControl
           jsr CheckCollisions
@@ -191,11 +193,76 @@ GameLoop
           
 
 ;------------------------------------------------------------
+;DeadControl   (ingame behaviour when player died)
+;------------------------------------------------------------
+!zone DeadControl
+DeadControl
+          lda SPRITE_ACTIVE
+          beq .PlayerIsDead
+          rts
+          
+.PlayerIsDead
+          lda #$10
+          bit $dc00
+          bne .ButtonNotPressed
+          
+          ;button pushed
+          lda BUTTON_RELEASED
+          bne .Restart
+          rts
+          
+
+.ButtonNotPressed
+          lda #1
+          sta BUTTON_RELEASED
+          rts
+          
+.Restart
+          lda #5
+          sta PARAM1 
+          
+          lda #4
+          sta PARAM2
+
+          ;type
+          lda #TYPE_PLAYER
+          sta PARAM3
+
+          ldx #0
+          lda PARAM3
+          sta SPRITE_ACTIVE,x
+          
+          ;PARAM1 and PARAM2 hold x,y already
+          jsr CalcSpritePosFromCharPos
+          
+          ;enable sprite
+          lda BIT_TABLE,x
+          ora VIC_SPRITE_ENABLE
+          sta VIC_SPRITE_ENABLE
+          
+          ;initialise enemy values
+          lda #SPRITE_PLAYER
+          sta SPRITE_POINTER_BASE,x
+          
+          ;look right per default
+          lda #0
+          sta SPRITE_DIRECTION,x
+          
+          rts
+          
+
+CheckCollisions
+;------------------------------------------------------------
 ;check object collisions (enemy vs. player etc.)
 ;x 
 ;------------------------------------------------------------
 
 CheckCollisions
+          lda SPRITE_ACTIVE
+          bne .PlayerIsAlive
+          rts          
+          
+.PlayerIsAlive          
           ldx #1
           
 .CollisionLoop          
@@ -206,9 +273,6 @@ CheckCollisions
           inx
           cpx #8
           bne .CollisionLoop          
-
-          lda #0
-          sta VIC_BORDER_COLOR
           rts
           
 .CheckObject
@@ -219,10 +283,21 @@ CheckCollisions
           jmp .NextObject
           
 .PlayerCollidedWithEnemy          
-          lda #1
-          sta VIC_BORDER_COLOR
-          ;ldx #0
-          ;jsr RemoveObject
+          lda #<TEXT_PRESS_FIRE
+          sta ZEROPAGE_POINTER_1
+          lda #>TEXT_PRESS_FIRE
+          sta ZEROPAGE_POINTER_1 + 1
+          lda #10
+          sta PARAM1
+          lda #23
+          sta PARAM2
+          jsr DisplayText
+
+          ldx #0
+          stx BUTTON_PRESSED
+          stx BUTTON_RELEASED
+          jsr RemoveObject
+
           rts
           
 
@@ -1303,6 +1378,71 @@ ClearPlayScreen
 
 
 ;------------------------------------------------------------
+;displays a line of text
+;ZEROPAGE_POINTER_1 = pointer to text
+;PARAM1 = X
+;PARAM2 = Y;
+;modifies ZEROPAGE_POINTER_2 and ZEROPAGE_POINTER_3
+
+!zone DisplayText
+DisplayText
+            ldx PARAM2
+            lda SCREEN_LINE_OFFSET_TABLE_LO,x
+            sta ZEROPAGE_POINTER_2
+            sta ZEROPAGE_POINTER_3
+            lda SCREEN_LINE_OFFSET_TABLE_HI,x
+            sta ZEROPAGE_POINTER_2 + 1
+            clc
+            adc #( ( SCREEN_COLOR - SCREEN_CHAR ) & 0xff00 ) >> 8
+            sta ZEROPAGE_POINTER_3 + 1
+
+            lda ZEROPAGE_POINTER_2
+            clc
+            adc PARAM1
+            sta ZEROPAGE_POINTER_2
+            lda ZEROPAGE_POINTER_2 + 1
+            adc #0
+            sta ZEROPAGE_POINTER_2 + 1
+            lda ZEROPAGE_POINTER_3
+            clc
+            adc PARAM1
+            sta ZEROPAGE_POINTER_3
+            lda ZEROPAGE_POINTER_3 + 1
+            adc #0
+            sta ZEROPAGE_POINTER_3 + 1
+            
+            ldy #0
+text_display_loop
+            lda (ZEROPAGE_POINTER_1),y
+            cmp #$2A
+            beq text_display_done
+            cmp #45
+            beq .LineBreak
+            sta (ZEROPAGE_POINTER_2),y
+            lda #1
+            sta (ZEROPAGE_POINTER_3),y
+            iny
+            jmp text_display_loop
+        
+.LineBreak
+            iny
+            tya
+            clc
+            adc ZEROPAGE_POINTER_1
+            sta ZEROPAGE_POINTER_1
+            lda #0
+            adc ZEROPAGE_POINTER_1 + 1
+            sta ZEROPAGE_POINTER_1 + 1
+            
+            inc PARAM2
+            inc PARAM2
+            jmp DisplayText
+            
+text_display_done
+            rts
+
+
+;------------------------------------------------------------
 ;copies charset from ZEROPAGE_POINTER_1 to ZEROPAGE_POINTER_2
 ;------------------------------------------------------------
 
@@ -1414,6 +1554,10 @@ LEVEL_BORDER_DATA
 
 LEVEL_NR  
           !byte 0
+BUTTON_PRESSED
+          !byte 0
+BUTTON_RELEASED
+          !byte 0
           
 PLAYER_JUMP_POS
           !byte 0
@@ -1424,7 +1568,6 @@ PLAYER_FALL_POS
           !byte 0
 FALL_SPEED_TABLE
           !byte 1,1,2,2,3,3,3,3,3,3
-          
           
 SPRITE_POS_X
           !byte 0,0,0,0,0,0,0,0
@@ -1459,6 +1602,9 @@ BIT_TABLE
           !byte 1,2,4,8,16,32,64,128
 XBIT_TABLE
           !byte 0,128
+          
+TEXT_PRESS_FIRE          
+          !text "PRESS FIRE TO RESTART*"
           
 SCREEN_LINE_OFFSET_TABLE_LO
           !byte ( SCREEN_CHAR +   0 ) & 0x00ff
