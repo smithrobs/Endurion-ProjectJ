@@ -3,8 +3,23 @@
 
 ;define constants here
 
+;placeholder for various temp parameters
+PARAM1    = $03
+PARAM2    = $04
+PARAM3    = $05
+PARAM4    = $06
+PARAM5    = $07
+
+;placeholder for zero page pointers
+ZEROPAGE_POINTER_1 = $17
+ZEROPAGE_POINTER_2 = $19
+ZEROPAGE_POINTER_3 = $21
+ZEROPAGE_POINTER_4 = $23
+
 ;address of the screen buffer
 SCREEN_CHAR      = 52224
+;address of color ram
+SCREEN_COLOR        = $d800
 
 ;this creates a basic start
 *=$0801
@@ -26,12 +41,61 @@ SCREEN_CHAR      = 52224
           and #$fc
           sta 56576
 
+          ;----------------------
+          ;copy charset to target          
+          ;----------------------
+          
+          ;block interrupts 
+          ;since we turn ROMs off this would result in crashes if we didn't
+          sei
+          
+          ;save old configuration
+          lda $01
+          sta PARAM1
+          
+          ;only RAM
+          ;to copy under the IO rom
+          lda #%00110000
+          sta $01
+          
+          ;take source address from CHARSET
+          LDA #<CHARSET
+          STA ZEROPAGE_POINTER_1
+          LDA #>CHARSET
+          STA ZEROPAGE_POINTER_1 + 1
+          
+          ;now copy
+          jsr CopyCharSet
+
+          ;restore ROMs
+          lda PARAM1
+          sta $01
+          
+          cli
+          
+          ;test charset
+          lda #'H'
+          sta SCREEN_CHAR
+          lda #'E'
+          sta SCREEN_CHAR + 1
+          lda #'L'
+          sta SCREEN_CHAR + 2
+          sta SCREEN_CHAR + 3
+          lda #'O'
+          sta SCREEN_CHAR + 4
+          
+          lda #1
+          sta SCREEN_COLOR
+          sta SCREEN_COLOR + 1
+          sta SCREEN_COLOR + 2
+          sta SCREEN_COLOR + 3
+          sta SCREEN_COLOR + 4
+          
+
           ;the main game loop
 GameLoop  
           ;border flashing
           inc 53280
-          ;top left char
-          inc SCREEN_CHAR
           
           jsr WaitFrame
 
@@ -57,3 +121,47 @@ WaitFrame
           
           rts
 
+
+!zone CopyCharSet
+CopyCharSet
+          ;set target address ($F000)
+          lda #$00
+          sta ZEROPAGE_POINTER_2
+          lda #$F0
+          sta ZEROPAGE_POINTER_2 + 1
+
+          ldx #$00
+          ldy #$00
+          lda #0
+          sta PARAM2
+
+.NextLine
+          lda (ZEROPAGE_POINTER_1),Y
+          sta (ZEROPAGE_POINTER_2),Y
+          inx
+          iny
+          cpx #$08
+          bne .NextLine
+          cpy #$00
+          bne .PageBoundaryNotReached
+          
+          ;we've reached the next 256 bytes, inc high byte
+          inc ZEROPAGE_POINTER_1 + 1
+          inc ZEROPAGE_POINTER_2 + 1
+
+.PageBoundaryNotReached
+
+          ;only copy 254 chars to keep irq vectors intact
+          inc PARAM2
+          lda PARAM2
+          cmp #254
+          beq .CopyCharsetDone
+          ldx #$00
+          jmp .NextLine
+
+.CopyCharsetDone
+          rts
+
+
+CHARSET
+          !binary "j.chr"
