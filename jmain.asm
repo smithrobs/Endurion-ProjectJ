@@ -1719,7 +1719,7 @@ HandleFinalBossIntro
           jsr FindEmptySpriteSlot
           jsr SpawnObject
           stx PARAM10
-
+          
           ;torso
           lda #19
           sta PARAM1
@@ -1757,7 +1757,7 @@ HandleFinalBossIntro
           sta SPRITE_VALUE,x
           lda #2
           sta VIC_SPRITE_COLOR,x
-
+          
           ;right arm
           lda #21
           sta PARAM1
@@ -7927,6 +7927,13 @@ CheckIsPlayerCollidingWithDiagonalLLUR
           rts
           
 .PlayerIsActive          
+          cmp #TYPE_PLAYER_DEAN
+          beq +
+          cmp #TYPE_PLAYER_SAM
+          beq +
+          rts
+          
++          
           lda SPRITE_STATE,y
           cmp #128
           bcs .PlayerNotActive
@@ -7992,6 +7999,13 @@ CheckIsPlayerCollidingWithDiagonalULLR
           rts
           
 .PlayerIsActive          
+          cmp #TYPE_PLAYER_DEAN
+          beq +
+          cmp #TYPE_PLAYER_SAM
+          beq +
+          rts
+          
++          
           lda SPRITE_STATE,y
           cmp #128
           bcs .PlayerNotActive
@@ -10014,23 +10028,47 @@ BOSS_MOVE_SPEED = 1
 
 ;------------------------------------------------------------
 ;boss #7
-;state = 128 -> random movements
+;state = 0, 128 -> random movements
 ;state = 129 -> attack with beams
 ;------------------------------------------------------------
 !zone BehaviourBoss7
 BehaviourBoss7
 BOSS_MOVE_SPEED = 1
+          lda SPRITE_HITBACK,x
+          beq .NoHitBack
+
+          dec SPRITE_HITBACK,x
+          
+          ldy SPRITE_HITBACK,x
+          lda BOSS_FLASH_TABLE,y
+          sta VIC_SPRITE_COLOR,x
+          
+          cpy #0
+          bne .NoHitBack
+          
+          ;make vulnerable again
+          lda #0
+          sta SPRITE_STATE,x
+          lda #2
+          sta VIC_SPRITE_COLOR,x
+        
+.NoHitBack        
+
           lda SPRITE_STATE,x
           beq .RandomMovements
+          cmp #1
+          beq +
           cmp #129
-          bne +
+          beq +
+          jmp .RandomMovements
+          
++          
           jmp .AttackWithBeams
-
-+
 
 .RandomMovements
           inc SPRITE_MODE_POS,x
           bne +
+          
           ;attack mode
           lda #129
           sta SPRITE_STATE,x
@@ -10142,7 +10180,14 @@ BOSS_MOVE_SPEED = 1
 
 
           inc SPRITE_MODE_POS,x
+
+          lda BOSS_PARTS_KILLED
+          cmp #5
+          bne +
+          jmp FinalAttack
           
++          
+
           lda SPRITE_MODE_POS,x
           cmp #5
           bcs +
@@ -10156,8 +10201,7 @@ BOSS_MOVE_SPEED = 1
           ;does player hit beam?
           ;modify x to point to arm object
           
-          ;TODO - only check left/right segment!
-          
+          ;only check left/right segment!
           lda SPRITE_ACTIVE + 2,x
           beq ++
           ;left arm
@@ -10250,8 +10294,7 @@ BOSS_MOVE_SPEED = 1
           beq .BeamStep3
           cmp #12
           bne +
-          lda #128
-          sta SPRITE_STATE,x
+          dec SPRITE_STATE,x
           lda #0
           sta SPRITE_MODE_POS,x
           ;remove beam
@@ -10284,6 +10327,8 @@ BOSS_MOVE_SPEED = 1
           adc #8
           sta PARAM4
           jsr RestoreBeamDiagonalULLR
+          
+          jsr RedrawItems
           
 +          
           rts
@@ -10395,6 +10440,227 @@ BOSS_MOVE_SPEED = 1
 ++          
           rts
 
+
+!zone FinalAttack
+.BeamStep1
+          ;left arm
+          lda SPRITE_CHAR_POS_Y,x
+          sta PARAM3
+          lda #0
+          sta PARAM1
+          lda SPRITE_CHAR_POS_X,x
+          sta PARAM2
+          ldy #0
+          jsr CheckIsPlayerCollidingWithYPosH
+          ldy #1
+          jsr CheckIsPlayerCollidingWithYPosH
+          
+
+          ldy #BEAM_TYPE_DARK
+          lda BEAM_CHAR_H,y
+          sta PARAM1
+          lda #1
+          sta PARAM2
+          lda #0
+          sta PARAM3
+          lda SPRITE_CHAR_POS_Y,x
+          sta PARAM4
+          lda SPRITE_CHAR_POS_X,x
+          sec
+          sbc #2
+          sta PARAM5
+          jsr DrawBeamHSegment
+          rts
+          
+.BeamStep1End
+          ;remove beam
+          lda #0
+          sta PARAM3
+          lda SPRITE_CHAR_POS_Y,x
+          sta PARAM4
+          lda #39
+          sta PARAM5
+          jsr RestoreBeamHSegment
+          jsr RedrawItems
+          rts
+
+
+.BeamStep2
+
+          lda SPRITE_CHAR_POS_Y,x
+          sta PARAM2
+          lda SPRITE_CHAR_POS_X,x
+          sta PARAM1
+          ldy #0
+          jsr CheckIsPlayerCollidingWithDiagonalLLUR
+          ldy #1
+          jsr CheckIsPlayerCollidingWithDiagonalLLUR
+
+          ldy #3
+          lda BEAM_CHAR_NESW,y
+          sta PARAM1
+          lda #1
+          sta PARAM2
+          lda SPRITE_CHAR_POS_X,x
+          sta PARAM3
+          lda SPRITE_CHAR_POS_Y,x
+          sta PARAM4
+          jsr DrawBeamDiagonalLLUR
+          rts
+          
+.BeamStep2End
+          lda SPRITE_CHAR_POS_X,x
+          sta PARAM3
+          lda SPRITE_CHAR_POS_Y,x
+          sta PARAM4
+          jsr RestoreBeamDiagonalLLUR
+          jsr RedrawItems
+          rts
+
+FinalAttack
+          ;mode 5, 6 = left
+          ;     7, 8 = diagonal left down
+          ;     9, 10 = down
+          ;     11, 12 = diagonal right down
+          ;     13, 14 = right
+          
+          lda SPRITE_MODE_POS,x
+          cmp #5
+          bne +
+          jmp .BeamStep1
++          
+          cmp #6
+          beq .BeamStep1End
+          cmp #7
+          beq .BeamStep2
+          cmp #8
+          beq .BeamStep2End
+          cmp #9
+          beq .BeamStep3
+          cmp #10
+          beq .BeamStep3End
+          cmp #11
+          beq .BeamStep4
+          cmp #12
+          bne +
+          jmp .BeamStep4End
++          
+          cmp #13
+          bne +
+          jmp .BeamStep5
++          
+          cmp #14
+          bne +
+          ; .BeamStep5End
+          jmp .BeamStep1End
++
+          cmp #15
+          bne +
+
+          lda #0
+          sta SPRITE_MODE_POS,x
+          sta SPRITE_STATE,x
++          
+          rts
+
+.BeamStep3
+
+          ;does player hit beam?
+          ldy #0
+          jsr CheckIsPlayerCollidingWithBeamV
+          ldy #1
+          jsr CheckIsPlayerCollidingWithBeamV
+
+          ldy #BEAM_TYPE_DARK
+          lda BEAM_CHAR_H,y
+          sta PARAM1
+          lda BEAM_CHAR_V,y
+          sta PARAM2
+          lda #1
+          sta PARAM3
+
+          lda SPRITE_CHAR_POS_X,x
+          sta PARAM4
+          lda SPRITE_CHAR_POS_Y,x
+          sta PARAM5
+          stx PARAM6
+          jsr DrawBeamV
+          rts
+          
+.BeamStep3End
+          lda SPRITE_CHAR_POS_X,x
+          sta PARAM4
+          lda SPRITE_CHAR_POS_Y,x
+          sta PARAM5
+
+          jsr RestoreBeamHV
+          jsr RedrawItems
+          rts
+          
+
+
+.BeamStep4
+          lda SPRITE_CHAR_POS_X,x
+          sta PARAM1
+          lda SPRITE_CHAR_POS_Y,x
+          sta PARAM2
+          ldy #0
+          jsr CheckIsPlayerCollidingWithDiagonalULLR
+          ldy #1
+          jsr CheckIsPlayerCollidingWithDiagonalULLR
+
+          ldy #3
+          lda BEAM_CHAR_NWSE,y
+          sta PARAM1
+          lda #1
+          sta PARAM2
+          lda SPRITE_CHAR_POS_X,x
+          sta PARAM3
+          lda SPRITE_CHAR_POS_Y,x
+          sta PARAM4
+          jsr DrawBeamDiagonalULLR
+
+          rts
+          
+.BeamStep4End
+          lda SPRITE_CHAR_POS_X,x
+          sta PARAM3
+          lda SPRITE_CHAR_POS_Y,x
+          sta PARAM4
+          jsr RestoreBeamDiagonalULLR
+          jsr RedrawItems
+          rts
+
+
+.BeamStep5
+
+          ;right arm
+          lda SPRITE_CHAR_POS_Y,x
+          sta PARAM3
+          lda SPRITE_CHAR_POS_X,x
+          sta PARAM1
+          lda #39
+          sta PARAM2
+          
+          ldy #0
+          jsr CheckIsPlayerCollidingWithYPosH
+          ldy #1
+          jsr CheckIsPlayerCollidingWithYPosH
+
+          ldy #BEAM_TYPE_DARK
+          lda BEAM_CHAR_H,y
+          sta PARAM1
+          lda #1
+          sta PARAM2
+          lda SPRITE_CHAR_POS_X,x
+          sta PARAM3
+          lda SPRITE_CHAR_POS_Y,x
+          sta PARAM4
+          lda #39
+          sta PARAM5
+          jsr DrawBeamHSegment
+          rts
+          
 
 
 ;PARAM1 = beam h char
@@ -13493,7 +13759,9 @@ TYPE_START_HP
           !byte 10    ;boss5
           !byte 10    ;boss6
           !byte 25    ;boss7
-          !byte 5     ;boss helper
+          !byte 1     ;boss helper
+          ;!byte 25    ;boss7
+          ;!byte 5     ;boss helper
           
 TYPE_ANNOYED_COLOR
           !byte 0     ;dummy
