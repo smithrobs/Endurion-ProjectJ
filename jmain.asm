@@ -73,6 +73,8 @@ TYPE_PLAYER             = 1
 TYPE_ENEMY_LR           = 2
 TYPE_ENEMY_UD           = 3
 
+OBJECT_HEIGHT           = 8 * 2
+
 ;this creates a basic start
 *=$0801
 
@@ -183,9 +185,108 @@ GameLoop
           jsr WaitFrame
 
           jsr ObjectControl
+          jsr CheckCollisions
           
           jmp GameLoop          
           
+
+;------------------------------------------------------------
+;check object collisions (enemy vs. player etc.)
+;x 
+;------------------------------------------------------------
+
+CheckCollisions
+          ldx #1
+          
+.CollisionLoop          
+          lda SPRITE_ACTIVE,x
+          bne .CheckObject
+          
+.NextObject          
+          inx
+          cpx #8
+          bne .CollisionLoop          
+
+          lda #0
+          sta VIC_BORDER_COLOR
+          rts
+          
+.CheckObject
+          stx PARAM2
+          jsr IsEnemyCollidingWithPlayer
+          bne .PlayerCollidedWithEnemy
+          ldx PARAM2
+          jmp .NextObject
+          
+.PlayerCollidedWithEnemy          
+          lda #1
+          sta VIC_BORDER_COLOR
+          ;ldx #0
+          ;jsr RemoveObject
+          rts
+          
+
+;------------------------------------------------------------
+;check object collision with player (object 0)
+;x = enemy index
+;return a = 1 when colliding, a = 0 when not
+;------------------------------------------------------------
+
+!zone IsEnemyCollidingWithPlayer
+
+
+.CalculateSimpleXPos
+          ;Returns a with simple x pos (x halved + 128 if > 256)
+          ;modifies y
+          lda BIT_TABLE,x
+          and SPRITE_POS_X_EXTEND
+          beq .NoXBit
+          
+          lda SPRITE_POS_X,x
+          lsr
+          clc
+          adc #128
+          rts
+          
+.NoXBit          
+          lda SPRITE_POS_X,x
+          lsr
+          rts
+
+IsEnemyCollidingWithPlayer
+          ;modifies X
+          ;check y pos
+          lda SPRITE_POS_Y,x
+          sec
+          sbc #( OBJECT_HEIGHT )      ;offset to bottom
+          cmp SPRITE_POS_Y
+          bcs .NotTouching
+          clc
+          adc #( OBJECT_HEIGHT + OBJECT_HEIGHT - 1 )
+          cmp SPRITE_POS_Y
+          bcc .NotTouching
+          
+          ;X = Index in enemy-table
+          jsr .CalculateSimpleXPos
+          sta PARAM1
+          ldx #0
+          jsr .CalculateSimpleXPos
+          
+          sec
+          sbc #4
+          ;position X-Anfang Player - 12 Pixel
+          cmp PARAM1
+          bcs .NotTouching
+          adc #8
+          cmp PARAM1
+          bcc .NotTouching
+          
+          lda #1
+          rts
+          
+.NotTouching
+          lda #0
+          rts
           
 ;------------------------------------------------------------
 ;check joystick (player control)
@@ -254,6 +355,7 @@ PlayerControl
           jsr PlayerMoveRight
 
 .NotRightPressed
+          ;restore x
           ldx #0
           rts
 
@@ -626,9 +728,9 @@ ObjectControl
           ;enemy is active
           dey
           lda ENEMY_BEHAVIOUR_TABLE_LO,y
-          sta ZEROPAGE_POINTER_2
+          sta ZEROPAGE_POINTER_1
           lda ENEMY_BEHAVIOUR_TABLE_HI,y
-          sta ZEROPAGE_POINTER_2 + 1
+          sta ZEROPAGE_POINTER_1 + 1
           
           ;set up return address for rts
           lda #>( .NextObject - 1 )
@@ -636,7 +738,7 @@ ObjectControl
           lda #<( .NextObject - 1 )
           pha
           
-          jmp (ZEROPAGE_POINTER_2)
+          jmp (ZEROPAGE_POINTER_1)
           
 .NextObject          
           inx
@@ -1150,6 +1252,25 @@ FindEmptySpriteSlot
 
 
 ;------------------------------------------------------------
+;Removed object from array
+;X = index of object
+;------------------------------------------------------------
+
+!zone RemoveObject
+RemoveObject
+          ;remove from array
+          lda #0
+          sta SPRITE_ACTIVE,x
+
+          ;disable sprite          
+          lda BIT_TABLE,x
+          eor #$ff
+          and VIC_SPRITE_ENABLE
+          sta VIC_SPRITE_ENABLE
+          rts
+
+
+;------------------------------------------------------------
 ;clears the play area of the screen
 ;A = char
 ;Y = color
@@ -1269,6 +1390,11 @@ LEVEL_1
           !byte LD_LINE_H,30,12,9,97,13
           !byte LD_LINE_H,10,19,20,96,13
           !byte LD_LINE_V,7,6,4,128,9
+          !byte LD_LINE_H,24,10,4,96,13
+          !byte LD_LINE_H,20,11,4,96,13
+          !byte LD_LINE_H,16,12,4,96,13
+          !byte LD_LINE_H,12,13,4,96,13
+          !byte LD_LINE_H,8,14,4,96,13
           !byte LD_OBJECT,5,4,TYPE_PLAYER
           !byte LD_OBJECT,34,11,TYPE_ENEMY_LR
           !byte LD_OBJECT,10,18,TYPE_ENEMY_UD
@@ -1331,6 +1457,8 @@ ENEMY_BEHAVIOUR_TABLE_HI
           
 BIT_TABLE
           !byte 1,2,4,8,16,32,64,128
+XBIT_TABLE
+          !byte 0,128
           
 SCREEN_LINE_OFFSET_TABLE_LO
           !byte ( SCREEN_CHAR +   0 ) & 0x00ff
