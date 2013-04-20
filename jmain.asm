@@ -7,11 +7,13 @@
 ;screen back char   $C800 to $CBFF
 ;screen             $CC00 to $CFFF
 ;sprites            $D000 to $EFFF
-;charset            $F000 to $F800
+;charset            $F000 to $FFFF
 
 ;TEST
+;screen back color  $BC00 to $BFFF
 ;sprites            $D000 to $F7FF
 ;charset            $F800 to $FFFF
+;charset2           $C000 to $C800
 
 
 ;define constants here
@@ -41,7 +43,9 @@ JOYSTICK_PORT_II        = $dc00
 
 CIA_PRA                 = $dd00
 
-START_LEVEL             = 21
+PROCESSOR_PORT          = $01
+
+START_LEVEL             = 24
 
 
 ;placeholder for various temp parameters
@@ -73,7 +77,8 @@ SCREEN_COLOR            = $D800
 SCREEN_BACK_CHAR        = $C800
 
 ;address of the screen backbuffer
-SCREEN_BACK_COLOR       = $C400
+;SCREEN_BACK_COLOR       = $C400
+SCREEN_BACK_COLOR       = $BC00
 
 
 ;address of sprite pointers
@@ -288,6 +293,7 @@ LD_ELEMENT              = 9     ;single element block
 LD_ELEMENT_LINE_H       = 10    ;element block line H
 LD_ELEMENT_LINE_V       = 11    ;element block line V
 LD_ELEMENT_AREA         = 12    ;element block area
+LD_LEVEL_CONFIG         = 13    ;level config byte
 
 ;object type constants
 TYPE_INVALID            = 0
@@ -388,13 +394,13 @@ BEAM_TYPE_LIGHT2        = 3
           sei
           
           ;save old configuration
-          lda $01
+          lda PROCESSOR_PORT
           sta PARAM1
           
           ;only RAM
           ;to copy under the IO rom
           lda #%00110000
-          sta $01
+          sta PROCESSOR_PORT
           
           ;take source address from CHARSET
           LDA #<CHARSET
@@ -405,6 +411,15 @@ BEAM_TYPE_LIGHT2        = 3
           ;now copy
           jsr CopyCharSet
           
+          ;take source address from CHARSET 2
+          LDA #<CHARSET_2
+          STA ZEROPAGE_POINTER_1
+          LDA #>CHARSET_2
+          STA ZEROPAGE_POINTER_1 + 1
+          
+          ;now copy
+          jsr CopyCharSet2
+          
           ;take source address from SPRITES
           lda #<SPRITES
           sta ZEROPAGE_POINTER_1
@@ -414,8 +429,9 @@ BEAM_TYPE_LIGHT2        = 3
           jsr CopySprites
           
           ;restore ROMs
-          lda PARAM1
-          sta $01
+          ;lda PARAM1
+          lda #$36
+          sta PROCESSOR_PORT
           
           cli
           
@@ -1025,8 +1041,8 @@ InitTitleIRQ
           jsr WaitFrame
           sei
 
-          lda #$37 ; make sure that IO regs at $dxxx
-          sta $01 ;are visible
+          lda #$36 ; make sure that IO regs at $dxxx are visible
+          sta PROCESSOR_PORT
 
           lda #$7f ;disable cia #1 generating timer irqs
           sta $dc0d ;which are used by the system to flash cursor, etc
@@ -1063,8 +1079,8 @@ ReleaseTitleIRQ
             
           sei
 
-          lda #$37 ; make sure that IO regs at $dxxx
-          sta $01 ;are visible
+          lda #$36 ; make sure that IO regs at $dxxx are visible
+          sta PROCESSOR_PORT
 
           lda #$ff ;enable cia #1 generating timer irqs
           sta $dc0d ;which are used by the system to flash cursor, etc
@@ -6675,7 +6691,11 @@ CheckIsPlayerCollidingWithDiagonalBeam
           lda PARAM1
           sec
           sbc PARAM2
-          and #$7f
+          bpl .PositiveDelta
+          lda PARAM2
+          sec
+          sbc PARAM1
+.PositiveDelta          
           cmp #1
           beq .PlayerHit
           
@@ -8063,6 +8083,8 @@ BuildScreen
           ldy #6
           jsr ClearPlayScreen
 
+          lda #0
+          sta LEVEL_CONFIG
           ;get pointer to real level data from table
           lda LEVEL_NR
           asl
@@ -8076,18 +8098,35 @@ BuildScreen
           beq .NoMoreLevels
           
           jsr .BuildLevel
+          
+          lda LEVEL_CONFIG
+          and #$01
+          bne .SkipBorder
 
           ;draw level border
           lda #<LEVEL_BORDER_DATA
           sta ZEROPAGE_POINTER_1
           lda #>LEVEL_BORDER_DATA
           sta ZEROPAGE_POINTER_1 + 1
-          
           jsr .BuildLevel
           
+.SkipBorder          
+          lda LEVEL_CONFIG
+          and #$02
+          beq .SetCharSet1
+          
+          ;set charset 2
+          lda #$30
+-          
+          sta VIC_MEMORY_CONTROL
+
           jsr DisplayLevelNumber
           
           rts
+          
+.SetCharSet1
+          lda #$3e
+          jmp -
           
 .NoMoreLevels
           ;loop from first screen
@@ -8129,6 +8168,7 @@ LEVEL_ELEMENT_TABLE_LO
           !byte <LevelElementH
           !byte <LevelElementV
           !byte <LevelElementArea
+          !byte <LevelConfigByte
           
 LEVEL_ELEMENT_TABLE_HI
           !byte >.LevelComplete
@@ -8144,6 +8184,7 @@ LEVEL_ELEMENT_TABLE_HI
           !byte >LevelElementH
           !byte >LevelElementV
           !byte >LevelElementArea
+          !byte >LevelConfigByte
 
 .LevelComplete          
           rts
@@ -8164,6 +8205,18 @@ NextLevelData
           
           jmp .LevelDataLoop
 
+
+!zone LevelConfigByte
+LevelConfigByte
+          ;X pos
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta LEVEL_CONFIG
+          
+          tya
+          pha
+          jmp NextLevelData
+          
 
 
 !zone LevelLineH
@@ -9208,22 +9261,22 @@ ClearPlayScreen
           ldx #$00
 .ClearLoop          
           sta SCREEN_CHAR,x
-          sta SCREEN_CHAR + 220,x
-          sta SCREEN_CHAR + 440,x
-          sta SCREEN_CHAR + 660,x
+          sta SCREEN_CHAR + 230,x
+          sta SCREEN_CHAR + 460,x
+          sta SCREEN_CHAR + 690,x
           inx
-          cpx #220
+          cpx #230
           bne .ClearLoop
 
           tya
           ldx #$00
 .ColorLoop          
           sta $d800,x
-          sta $d800 + 220,x
-          sta $d800 + 440,x
-          sta $d800 + 660,x
+          sta $d800 + 230,x
+          sta $d800 + 460,x
+          sta $d800 + 690,x
           inx
-          cpx #220
+          cpx #230
           bne .ColorLoop
 
           rts
@@ -9458,6 +9511,51 @@ CopyCharSet
           lda #$00
           sta ZEROPAGE_POINTER_2
           lda #$F8
+          sta ZEROPAGE_POINTER_2 + 1
+
+          ldx #$00
+          ldy #$00
+          lda #0
+          sta PARAM2
+
+.NextLine
+          lda (ZEROPAGE_POINTER_1),Y
+          sta (ZEROPAGE_POINTER_2),Y
+          inx
+          iny
+          cpx #$08
+          bne .NextLine
+          cpy #$00
+          bne .PageBoundaryNotReached
+          
+          ;we've reached the next 256 bytes, inc high byte
+          inc ZEROPAGE_POINTER_1 + 1
+          inc ZEROPAGE_POINTER_2 + 1
+
+.PageBoundaryNotReached
+
+          ;only copy 254 chars to keep irq vectors intact
+          inc PARAM2
+          lda PARAM2
+          cmp #254
+          beq .CopyCharsetDone
+          ldx #$00
+          jmp .NextLine
+
+.CopyCharsetDone
+          rts
+
+
+;------------------------------------------------------------
+;copies charset from ZEROPAGE_POINTER_1 to ZEROPAGE_POINTER_2
+;------------------------------------------------------------
+
+!zone CopyCharSet2
+CopyCharSet2
+          ;set target address ($F000)
+          lda #$00
+          sta ZEROPAGE_POINTER_2
+          lda #$C0
           sta ZEROPAGE_POINTER_2 + 1
 
           ldx #$00
@@ -10469,6 +10567,8 @@ NUMBER_SPAWNS_ALIVE
           
 LEVEL_DONE_DELAY
           !byte 0
+LEVEL_CONFIG
+          !byte 0
 DELAYED_GENERIC_COUNTER
           !byte 0
           
@@ -10529,7 +10629,7 @@ TEXT_ENTER_NAME
 TEXT_GET_READY
           !text 226,228,230,0,232,228,234,235,237,231,"-"
           !text 227,229,231,0,233,229,233,236,231,238,"*"
-          
+
 CHAPTER
           !byte 0
 
@@ -10650,6 +10750,8 @@ LEVEL_BORDER_DATA
 
 CHARSET
           !binary "j.chr"
+CHARSET_2          
+          !binary "j2.chr"
           
 SPRITES
           !binary "j.spr"
