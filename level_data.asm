@@ -234,7 +234,7 @@ SN_SCREEN_DATA_TABLE
           !word SN_LEVEL_30
           !word SN_LEVEL_31
           !word SN_LEVEL_32
-          ;!word SN_LEVEL_33
+          !word SN_LEVEL_33
           !word SN_LEVEL_34
           !word SN_LEVEL_35
           !word 0
