@@ -32,6 +32,8 @@ VIC_BACKGROUND_COLOR    = $d021
 VIC_CHARSET_MULTICOLOR_1= $d022
 VIC_CHARSET_MULTICOLOR_2= $d023
 
+JOYSTICK_PORT_II        = $dc00
+
 CIA_PRA                 = $dd00
 
 ;address of the screen buffer
@@ -169,20 +171,28 @@ ITEM_COUNT              = 8
           sta VIC_SPRITE_X_EXTEND
           sta VIC_SPRITE_ENABLE
 
+          ;game start values
+          lda #3
+          sta PLAYER_LIVES
+          
           ;setup level
           lda #0
           sta LEVEL_NR
           jsr BuildScreen
-
-          jsr CopyLevelToBackBuffer          
-
-          lda #48
-          clc
-          adc NUMBER_ENEMIES_ALIVE
-          sta SCREEN_CHAR
-          lda #1
-          sta SCREEN_COLOR
           
+          
+          jsr CopyLevelToBackBuffer          
+          
+          lda #<TEXT_DISPLAY
+          sta ZEROPAGE_POINTER_1
+          lda #>TEXT_DISPLAY
+          sta ZEROPAGE_POINTER_1 + 1
+          lda #0
+          sta PARAM1
+          lda #23
+          sta PARAM2
+          jsr DisplayText
+          jsr DisplayLevelNumber
 
 ;------------------------------------------------------------
 ;the main game loop
@@ -238,6 +248,8 @@ GameFlowControl
           jsr BuildScreen
           
           jsr CopyLevelToBackBuffer
+          
+          jsr DisplayLevelNumber
           
           rts
 
@@ -338,9 +350,12 @@ CheckCollisions
           sta ZEROPAGE_POINTER_1 + 1
           lda #10
           sta PARAM1
-          lda #23
+          lda #24
           sta PARAM2
           jsr DisplayText
+          
+          dec PLAYER_LIVES
+          jsr DisplayLiveNumber
 
           ldx #0
           stx BUTTON_PRESSED
@@ -581,6 +596,9 @@ PickItem
           lda #ITEM_NONE
           sta ITEM_ACTIVE,y
           
+          lda #3
+          jsr IncreaseScore
+
           jsr RemoveItemImage
           rts
 
@@ -639,6 +657,7 @@ PutItemImage
 
 ;------------------------------------------------------------
 ;remove item image from screen
+;PARAM1 = 
 ;Y = item index
 ;------------------------------------------------------------
 !zone RemoveItemImage
@@ -796,6 +815,9 @@ FireShot
           
 .EnemyHit          
           ;enemy hit!
+          lda #1
+          jsr IncreaseScore
+          
           dec SPRITE_HP,x
           lda SPRITE_HP,x
           beq .EnemyKilled
@@ -803,12 +825,14 @@ FireShot
           
           
 .EnemyKilled          
+          lda #5
+          jsr IncreaseScore
+
           ldy SPRITE_ACTIVE,x
           lda IS_TYPE_ENEMY,y
           beq .NoEnemy
           
           dec NUMBER_ENEMIES_ALIVE
-          dec SCREEN_CHAR
           
 .NoEnemy          
           jsr RemoveObject
@@ -1522,6 +1546,7 @@ BuildScreen
           lda #0
           sta NUMBER_ENEMIES_ALIVE
           sta LEVEL_DONE_DELAY
+          sta SPRITE_POS_X_EXTEND
           
           ;reset all objects
           ldx #0
@@ -1940,6 +1965,92 @@ DisplayText
 
 
 ;------------------------------------------------------------
+;increases score by A
+;note that the score is only shown; not held in a variable
+;------------------------------------------------------------
+!zone IncreaseScore
+IncreaseScore
+          sta PARAM1
+          stx PARAM2
+          sty PARAM3
+          
+.IncreaseBy1          
+          ldx #4
+          
+.IncreaseDigit          
+          inc SCREEN_CHAR + ( 23 * 40 + 8 ),x
+          lda SCREEN_CHAR + ( 23 * 40 + 8 ),x
+          cmp #58
+          bne .IncreaseBy1Done
+          
+          ;looped digit, increase next
+          lda #48
+          sta SCREEN_CHAR + ( 23 * 40 + 8 ),x
+          dex
+          ;TODO - this might overflow
+          jmp .IncreaseDigit
+          
+.IncreaseBy1Done          
+          dec PARAM1
+          bne .IncreaseBy1
+          
+          ;increase complete, restore x,y
+          ldx PARAM2
+          ldy PARAM3
+          rts
+
+
+;------------------------------------------------------------
+;displays level number
+;------------------------------------------------------------
+!zone DisplayLevelNumber
+DisplayLevelNumber
+          lda LEVEL_NR
+          clc
+          adc #1
+          jsr DivideBy10
+          
+          pha
+          
+          ;10 digit
+          tya
+          clc
+          adc #48
+          sta SCREEN_CHAR + ( 23 * 40 + 37 )
+          
+          pla
+          clc
+          adc #48
+          sta SCREEN_CHAR + ( 23 * 40 + 38 )
+          
+          rts
+          
+
+;------------------------------------------------------------
+;displays live number
+;------------------------------------------------------------
+!zone DisplayLiveNumber
+DisplayLiveNumber
+          lda PLAYER_LIVES
+          jsr DivideBy10
+          
+          pha
+          
+          ;10 digit
+          tya
+          clc
+          adc #48
+          sta SCREEN_CHAR + ( 23 * 40 + 24 )
+          
+          pla
+          clc
+          adc #48
+          sta SCREEN_CHAR + ( 23 * 40 + 25 )
+          
+          rts
+          
+
+;------------------------------------------------------------
 ;generates a sometimes random number
 ;------------------------------------------------------------
 !zone GenerateRandomNumber
@@ -2026,6 +2137,24 @@ CopySprites
 
           rts
           
+          
+;------------------------------------------------------------
+;divides A by 10
+;returns remainder in A
+;returns result in Y
+;------------------------------------------------------------
+!zone DivideBy10
+DivideBy10
+          sec
+          ldy #$FF
+.divloop
+          iny
+          sbc #10
+          bcs .divloop
+          adc #10
+          rts
+
+          
 ;------------------------------------------------------------
 ;screen data
 ;------------------------------------------------------------
@@ -2094,6 +2223,8 @@ PLAYER_FALL_POS
 FALL_SPEED_TABLE
           !byte 1,1,2,2,3,3,3,3,3,3
 PLAYER_SHOT_PAUSE
+          !byte 0
+PLAYER_LIVES
           !byte 0
 SPRITE_HP
           !byte 0,0,0,0,0,0,0,0
@@ -2171,6 +2302,8 @@ XBIT_TABLE
           
 TEXT_PRESS_FIRE          
           !text "PRESS FIRE TO RESTART*"
+TEXT_DISPLAY
+          !text " SCORE: 000000   LIVES: 03    LEVEL: 00 *"
           
 SCREEN_LINE_OFFSET_TABLE_LO
           !byte ( SCREEN_CHAR +   0 ) & 0x00ff
