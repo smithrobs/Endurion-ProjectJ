@@ -1141,6 +1141,11 @@ GameLoop
           
           ;lda NUMBER_SPAWNS_ALIVE
           ;sta VIC_BACKGROUND_COLOR
+          
+          ;lda SPRITE_HELD
+          ;sta VIC_BORDER_COLOR
+          ;lda BOSS_HELD
+          ;sta VIC_BACKGROUND_COLOR
 
           jsr WaitFrame
           
@@ -1717,7 +1722,8 @@ HandleFinalBossIntro
           sta PARAM2
           lda #TYPE_BOSS7
           sta PARAM3
-          jsr FindEmptySpriteSlot
+          ldx #2
+          jsr FindEmptySpriteSlotWithStartingX
           jsr SpawnObject
           stx PARAM10
           
@@ -1728,7 +1734,8 @@ HandleFinalBossIntro
           sta PARAM2
           lda #TYPE_BOSS5
           sta PARAM3
-          jsr FindEmptySpriteSlot
+          ldx #2
+          jsr FindEmptySpriteSlotWithStartingX
           jsr SpawnObject
           lda #TYPE_BOSS_PART
           sta SPRITE_ACTIVE,x
@@ -1748,7 +1755,8 @@ HandleFinalBossIntro
           sta PARAM2
           lda #TYPE_BOSS3
           sta PARAM3
-          jsr FindEmptySpriteSlot
+          ldx #2
+          jsr FindEmptySpriteSlotWithStartingX
           jsr SpawnObject
           lda #TYPE_BOSS_PART
           sta SPRITE_ACTIVE,x
@@ -1766,7 +1774,8 @@ HandleFinalBossIntro
           sta PARAM2
           lda #TYPE_BOSS4
           sta PARAM3
-          jsr FindEmptySpriteSlot
+          ldx #2
+          jsr FindEmptySpriteSlotWithStartingX
           jsr SpawnObject
           lda #TYPE_BOSS_PART
           sta SPRITE_ACTIVE,x
@@ -1784,7 +1793,8 @@ HandleFinalBossIntro
           sta PARAM2
           lda #TYPE_BOSS2
           sta PARAM3
-          jsr FindEmptySpriteSlot
+          ldx #2
+          jsr FindEmptySpriteSlotWithStartingX
           jsr SpawnObject
           lda #TYPE_BOSS_PART
           sta SPRITE_ACTIVE,x
@@ -1802,7 +1812,8 @@ HandleFinalBossIntro
           sta PARAM2
           lda #TYPE_BOSS
           sta PARAM3
-          jsr FindEmptySpriteSlot
+          ldx #2
+          jsr FindEmptySpriteSlotWithStartingX
           jsr SpawnObject
           lda #TYPE_BOSS_PART
           sta SPRITE_ACTIVE,x
@@ -2854,8 +2865,10 @@ PlayerControl
           clc
           adc #1
           cmp SPRITE_CHAR_POS_Y,x
-          bne .SamNotFirePushed
+          beq +
+          jmp .SamNotFirePushed
           
++          
           ;Sam needs to keep pressed
           jsr RedrawForceBeam
           
@@ -2915,7 +2928,14 @@ PlayerControl
 
 +
           dec SPRITE_HP,x
-          bne .EnemyWasHurt
+          beq .EnemyKilled
+          
+          ;enemy was hurt
+          lda BOSS_HELD
+          beq .EnemyWasHurt
+          
+          ;release if end boss
+          jmp .SamNotFirePushed
           
 .EnemyKilled          
           lda #5
@@ -2937,6 +2957,7 @@ PlayerControl
           
           lda #0
           sta SPRITE_HELD
+          sta BOSS_HELD
           jsr RemoveForceBeam
           ldx PARAM6
 +          
@@ -3546,6 +3567,7 @@ FireShot
           
           lda #0
           sta SPRITE_HELD
+          sta BOSS_HELD
           
 .NotHeldEnemy          
           lda SUPER_BULLET
@@ -3606,12 +3628,13 @@ KillEnemy
           ;is the enemy currently held?
           ldy SPRITE_HELD
           dey
-          tya
-          cmp SPRITE_ACTIVE,x
+          sty PARAM4
+          cpx PARAM4
           bne .WasNotHeld
           
           lda #0
           sta SPRITE_HELD
+          sta BOSS_HELD
           
 .WasNotHeld          
           ldy SPRITE_ACTIVE,x
@@ -3818,7 +3841,17 @@ SamUseForce
           ldy SPRITE_HELD
           inc SPRITE_HELD
           
+          lda SPRITE_ACTIVE,y
+          cmp #TYPE_BOSS7
+          beq .HoldingBoss
+          cmp #TYPE_BOSS_PART
+          beq .HoldingBoss
+          jmp .NotHoldingBoss
           
+.HoldingBoss          
+          sty BOSS_HELD
+          inc BOSS_HELD
+.NotHoldingBoss          
           ;redraw black beam
           ldx PARAM6
           
@@ -4752,79 +4785,9 @@ ObjectMoveUp
           sta SPRITE_CHAR_POS_Y_DELTA,x
           
 .NoCharStep          
-          jsr MoveSpriteUp
-          rts
+          jmp MoveSpriteUp
           
           
-;------------------------------------------------------------
-;move object down if not blocked
-;x = object index
-;------------------------------------------------------------
-!zone ObjectMoveDownBlocking
-ObjectMoveDownBlocking
-          
-          lda SPRITE_CHAR_POS_Y_DELTA,x
-          beq .CheckCanMoveDown
-          
-.CanMoveDown
-          inc SPRITE_CHAR_POS_Y_DELTA,x
-          
-          lda SPRITE_CHAR_POS_Y_DELTA,x
-          cmp #8
-          bne .NoCharStep
-          
-          lda #0
-          sta SPRITE_CHAR_POS_Y_DELTA,x
-          inc SPRITE_CHAR_POS_Y,x
-          
-.NoCharStep          
-          jsr MoveSpriteDown
-          lda #1
-          rts
-          
-.CheckCanMoveDown
-          lda SPRITE_CHAR_POS_Y,x
-          cmp MOVE_BORDER_BOTTOM
-          beq .BlockedDown
-
-          lda SPRITE_CHAR_POS_X_DELTA,x
-          beq .NoSecondCharCheckNeeded
-          
-          ldy SPRITE_CHAR_POS_Y,x
-          iny
-          lda SCREEN_LINE_OFFSET_TABLE_LO,y
-          sta ZEROPAGE_POINTER_1
-          lda SCREEN_BACK_LINE_OFFSET_TABLE_HI,y
-          sta ZEROPAGE_POINTER_1 + 1
-
-          ldy SPRITE_CHAR_POS_X,x
-          iny
-          lda (ZEROPAGE_POINTER_1),y
-          
-          jsr IsCharBlockingFall
-          bne .BlockedDown
-          
-.NoSecondCharCheckNeeded          
-
-          ldy SPRITE_CHAR_POS_Y,x
-          iny
-          lda SCREEN_LINE_OFFSET_TABLE_LO,y
-          sta ZEROPAGE_POINTER_1
-          lda SCREEN_BACK_LINE_OFFSET_TABLE_HI,y
-          sta ZEROPAGE_POINTER_1 + 1
-          
-          ldy SPRITE_CHAR_POS_X,x
-          
-          lda (ZEROPAGE_POINTER_1),y
-          
-          jsr IsCharBlockingFall
-          bne .BlockedDown
-          
-          jmp .CanMoveDown
-          
-.BlockedDown
-          lda #0
-          rts
           
 
 
@@ -4912,7 +4875,8 @@ ObjectMoveDownBlocking
         !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
         !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 
- 
+
+
  
 
 ;------------------------------------------------------------
@@ -5078,6 +5042,77 @@ SCREEN_BACK_LINE_OFFSET_TABLE_HI
 * = $3000
 MUSIC_PLAYER
 !binary "music.bin",,2
+
+
+;------------------------------------------------------------
+;move object down if not blocked
+;x = object index
+;------------------------------------------------------------
+!zone ObjectMoveDownBlocking
+ObjectMoveDownBlocking
+          
+          lda SPRITE_CHAR_POS_Y_DELTA,x
+          beq .CheckCanMoveDown
+          
+.CanMoveDown
+          inc SPRITE_CHAR_POS_Y_DELTA,x
+          
+          lda SPRITE_CHAR_POS_Y_DELTA,x
+          cmp #8
+          bne .NoCharStep
+          
+          lda #0
+          sta SPRITE_CHAR_POS_Y_DELTA,x
+          inc SPRITE_CHAR_POS_Y,x
+          
+.NoCharStep          
+          jsr MoveSpriteDown
+          lda #1
+          rts
+          
+.CheckCanMoveDown
+          lda SPRITE_CHAR_POS_Y,x
+          cmp MOVE_BORDER_BOTTOM
+          beq .BlockedDown
+
+          lda SPRITE_CHAR_POS_X_DELTA,x
+          beq .NoSecondCharCheckNeeded
+          
+          ldy SPRITE_CHAR_POS_Y,x
+          iny
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          lda SCREEN_BACK_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+
+          ldy SPRITE_CHAR_POS_X,x
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          
+          jsr IsCharBlockingFall
+          bne .BlockedDown
+          
+.NoSecondCharCheckNeeded          
+
+          ldy SPRITE_CHAR_POS_Y,x
+          iny
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          lda SCREEN_BACK_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+          
+          ldy SPRITE_CHAR_POS_X,x
+          
+          lda (ZEROPAGE_POINTER_1),y
+          
+          jsr IsCharBlockingFall
+          bne .BlockedDown
+          
+          jmp .CanMoveDown
+          
+.BlockedDown
+          lda #0
+          rts
 
 
 ;------------------------------------------------------------
@@ -7782,6 +7817,8 @@ KillPlayer
           bne .PlayerWasDean
           
           ;reset Sam specific variables
+          lda SPRITE_HELD
+          beq .PlayerWasDean
           jsr RemoveForceBeam
           lda #0
           sta SPRITE_HELD
@@ -10055,8 +10092,14 @@ BOSS_MOVE_SPEED = 1
           lda #SPRITE_BOSS_HEAD
           sta SPRITE_POINTER_BASE,x
         
-.NoHitBack        
+.NoHitBack
+          lda BOSS_HELD
+          beq +
+          
+          rts
 
+
++
           lda SPRITE_STATE,x
           beq .RandomMovements
           cmp #1
@@ -10115,7 +10158,11 @@ BOSS_MOVE_SPEED = 1
           sta PARAM10
 -          
           inx
+          lda SPRITE_ACTIVE,x
+          cmp #TYPE_BOSS_PART
+          bne +
           jsr ObjectMoveLeft
++          
           dec PARAM10
           bne -
           
@@ -10129,7 +10176,11 @@ BOSS_MOVE_SPEED = 1
           sta PARAM10
 -          
           inx
+          lda SPRITE_ACTIVE,x
+          cmp #TYPE_BOSS_PART
+          bne +
           jsr ObjectMoveRight
++          
           dec PARAM10
           bne -
           
@@ -10145,7 +10196,11 @@ BOSS_MOVE_SPEED = 1
           sta PARAM10
 -          
           inx
+          lda SPRITE_ACTIVE,x
+          cmp #TYPE_BOSS_PART
+          bne +
           jsr ObjectMoveUp
++          
           dec PARAM10
           bne -
           jmp .DoMoveDone
@@ -10158,7 +10213,11 @@ BOSS_MOVE_SPEED = 1
           sta PARAM10
 -          
           inx
+          lda SPRITE_ACTIVE,x
+          cmp #TYPE_BOSS_PART
+          bne +
           jsr ObjectMoveDown
++          
           dec PARAM10
           bne -
 .DoMoveDone          
@@ -10194,6 +10253,10 @@ BOSS_MOVE_SPEED = 1
           bne +
 
           ;attack with bats
+          jsr GenerateRandomNumber
+          and #$01
+          beq .NoBatLeft
+          
           lda SPRITE_CHAR_POS_X,x
           sta PARAM1
           lda SPRITE_CHAR_POS_Y,x
@@ -10201,13 +10264,9 @@ BOSS_MOVE_SPEED = 1
           adc #4
           sta PARAM2
           inc PARAM2
-          stx PARAM10
           
-          jsr GenerateRandomNumber
-          and #$01
-          beq .NoBatLeft
-
-          jsr FindEmptySpriteSlot
+          ldx #2
+          jsr FindEmptySpriteSlotWithStartingX
           beq ++
           
           lda #TYPE_BAT_ATTACKING
@@ -10220,9 +10279,20 @@ BOSS_MOVE_SPEED = 1
           and #$01
           beq .NoBatRight
 
-          jsr FindEmptySpriteSlot
-          beq ++
-
+          ldx CURRENT_INDEX
+          lda SPRITE_CHAR_POS_X,x
+          sta PARAM1
+          lda SPRITE_CHAR_POS_Y,x
+          clc
+          adc #4
+          sta PARAM2
+          inc PARAM2
+          lda #TYPE_BAT_ATTACKING
+          sta PARAM3
+          
+          ldx #2
+          jsr FindEmptySpriteSlotWithStartingX
+          beq ++          
           jsr SpawnObject
           lda #1
           sta SPRITE_DIRECTION,x
@@ -10273,6 +10343,7 @@ BOSS_MOVE_SPEED = 1
           jsr CheckIsPlayerCollidingWithYPosH
           ldy #1
           jsr CheckIsPlayerCollidingWithYPosH
+          ldx CURRENT_INDEX
 ++
           lda SPRITE_ACTIVE + 3,x
           beq ++
@@ -10292,6 +10363,7 @@ BOSS_MOVE_SPEED = 1
           jsr CheckIsPlayerCollidingWithYPosH
           ldy #1
           jsr CheckIsPlayerCollidingWithYPosH
+          ldx CURRENT_INDEX
 ++
 
           lda SPRITE_ACTIVE + 4,x
@@ -10309,7 +10381,7 @@ BOSS_MOVE_SPEED = 1
           jsr CheckIsPlayerCollidingWithDiagonalLLUR
           ldy #1
           jsr CheckIsPlayerCollidingWithDiagonalLLUR
-
+          ldx CURRENT_INDEX
 
 ++
           lda SPRITE_ACTIVE + 5,x
@@ -10327,6 +10399,7 @@ BOSS_MOVE_SPEED = 1
           jsr CheckIsPlayerCollidingWithDiagonalULLR
           ldy #1
           jsr CheckIsPlayerCollidingWithDiagonalULLR
+          ldx CURRENT_INDEX
 ++          
           
           
@@ -10508,6 +10581,7 @@ BOSS_MOVE_SPEED = 1
           jsr CheckIsPlayerCollidingWithYPosH
           ldy #1
           jsr CheckIsPlayerCollidingWithYPosH
+          ldx CURRENT_INDEX
           
 
           ldy #BEAM_TYPE_DARK
@@ -10549,6 +10623,7 @@ BOSS_MOVE_SPEED = 1
           jsr CheckIsPlayerCollidingWithDiagonalLLUR
           ldy #1
           jsr CheckIsPlayerCollidingWithDiagonalLLUR
+          ldx CURRENT_INDEX
 
           ldy #3
           lda BEAM_CHAR_NESW,y
@@ -10624,6 +10699,7 @@ FinalAttack
           jsr CheckIsPlayerCollidingWithBeamV
           ldy #1
           jsr CheckIsPlayerCollidingWithBeamV
+          ldx CURRENT_INDEX
 
           ldy #BEAM_TYPE_DARK
           lda BEAM_CHAR_H,y
@@ -10662,6 +10738,7 @@ FinalAttack
           jsr CheckIsPlayerCollidingWithDiagonalULLR
           ldy #1
           jsr CheckIsPlayerCollidingWithDiagonalULLR
+          ldx CURRENT_INDEX
 
           ldy #3
           lda BEAM_CHAR_NWSE,y
@@ -10700,6 +10777,7 @@ FinalAttack
           jsr CheckIsPlayerCollidingWithYPosH
           ldy #1
           jsr CheckIsPlayerCollidingWithYPosH
+          ldx CURRENT_INDEX
 
           ldy #BEAM_TYPE_DARK
           lda BEAM_CHAR_H,y
@@ -13514,6 +13592,8 @@ SPRITE_HITBACK
 SPRITE_HITBACK_DIRECTION
           !byte 0,0,0,0,0,0,0,0
 SPRITE_HELD
+          !byte 0
+BOSS_HELD
           !byte 0
 
 SPAWN_SPOT_X

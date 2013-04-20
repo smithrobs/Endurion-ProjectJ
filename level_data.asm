@@ -2483,6 +2483,8 @@ SN_LEVEL_72
           !byte LD_ELEMENT,28,146
           !byte LD_ELEMENT,31,143
           !byte LD_ELEMENT,5,143
+          !byte LD_ELEMENT,8,12,EL_SN_SAND_STONE_2
+          !byte LD_ELEMENT,30,140
           !byte LD_END
 SN_LEVEL_73
           !byte LD_LINE_H_ALT,1,20,38,160,13
