@@ -10189,8 +10189,59 @@ BOSS_MOVE_SPEED = 1
           bne +
           jmp FinalAttack
           
-+          
++         
+          cmp #4
+          bne +
 
+          ;attack with bats
+          lda SPRITE_CHAR_POS_X,x
+          sta PARAM1
+          lda SPRITE_CHAR_POS_Y,x
+          clc
+          adc #4
+          sta PARAM2
+          inc PARAM2
+          stx PARAM10
+          
+          jsr GenerateRandomNumber
+          and #$01
+          beq .NoBatLeft
+
+          jsr FindEmptySpriteSlot
+          beq ++
+          
+          lda #TYPE_BAT_ATTACKING
+          sta PARAM3
+          jsr SpawnObject
+          lda #0
+          sta SPRITE_DIRECTION,x
+.NoBatLeft
+          jsr GenerateRandomNumber
+          and #$01
+          beq .NoBatRight
+
+          jsr FindEmptySpriteSlot
+          beq ++
+
+          jsr SpawnObject
+          lda #1
+          sta SPRITE_DIRECTION,x
+++          
+.NoBatRight
+          ldx CURRENT_INDEX
+          
+          lda SPRITE_MODE_POS,x
+          cmp #20
+          bne +++
+                    
+          dec SPRITE_STATE,x
+          lda #0
+          sta SPRITE_MODE_POS,x
++++
+          rts
+
+
++
           lda SPRITE_MODE_POS,x
           cmp #5
           bcs +
