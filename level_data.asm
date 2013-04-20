@@ -437,7 +437,7 @@ SN_LEVEL_11
           !byte LD_LINE_H_ALT,35,17,4,160,13
           !byte LD_OBJECT,6,19,TYPE_PLAYER_DEAN
           !byte LD_OBJECT,33,19,TYPE_PLAYER_SAM
-          !byte LD_OBJECT,2,4,TYPE_DEVIL
+          !byte LD_OBJECT,2,4,TYPE_WOLFMAN
           !byte LD_LINE_H_ALT,1,5,4,160,13
           !byte LD_LINE_H_ALT,35,5,4,160,13
           !byte LD_END

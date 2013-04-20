@@ -306,6 +306,7 @@ TYPE_IMPALA_2           = 22
 TYPE_IMPALA_3           = 23
 TYPE_IMPALA_DRIVER      = 24
 TYPE_IMPALA_DEBRIS      = 25
+TYPE_WOLFMAN_2P         = 26
 
 OBJECT_HEIGHT           = 8 * 2
 
@@ -674,6 +675,10 @@ TitleScreenWithoutIRQ
           lda #3
           sta PLAYER_LIVES
           sta PLAYER_LIVES + 1
+          lda #0
+          sta PLAYER_RELOAD_SPEED
+          lda #5
+          sta PLAYER_FORCE_RANGE
           
           ;setup level
           jsr StartLevel
@@ -759,7 +764,6 @@ TitleScreenWithoutIRQ
           sta PLAYER_SHELLS_MAX
 
           lda #0
-          sta PLAYER_FAST_RELOAD
           sta PLAYER_INVINCIBLE          
           sta SPRITE_STATE
           
@@ -1282,7 +1286,6 @@ StartLevel
           sta SPRITE_POS_X_EXTEND
           sta PLAYER_STAND_STILL_TIME
           sta PLAYER_STAND_STILL_TIME + 1
-          sta PLAYER_FAST_RELOAD
           sta PLAYER_INVINCIBLE
           sta PLAYER_INVINCIBLE + 1
           sta PLAYER_FIRE_PRESSED_TIME + 1
@@ -1844,7 +1847,6 @@ IsEnemyCollidingWithPlayer
           lda #SPRITE_PLAYER
           sta SPRITE_POINTER_BASE,x
           lda #0
-          sta PLAYER_FAST_RELOAD,x
           sta PLAYER_FIRE_PRESSED_TIME,x
           
           lda #200
@@ -1933,17 +1935,23 @@ PlayerControl
           ;don't reload while recoil
           lda PLAYER_SHOT_PAUSE,x
           bne .PlayerMoved
-
-          lda PLAYER_FAST_RELOAD,x
-          beq .NoFastReload
-          dec PLAYER_FAST_RELOAD,x
-          inc PLAYER_STAND_STILL_TIME,x
-.NoFastReload          
-          inc PLAYER_STAND_STILL_TIME,x
-          lda PLAYER_STAND_STILL_TIME,x
-          cmp #40
-          bmi .HandleFire
           
+          cpx #1
+          beq .HandleSam
+          
+          ldy PLAYER_RELOAD_SPEED
+          lda PLAYER_STAND_STILL_TIME
+          clc
+          adc RELOAD_SPEED,y
+          cmp RELOAD_SPEED_MAX,y
+          bcs .ReloadTimeDone
+          
+          sta PLAYER_STAND_STILL_TIME
+          jmp .HandleFire
+          
+.ReloadTimeDone
+          lda #0
+          sta PLAYER_STAND_STILL_TIME
           ;reload
           lda #1
           sta PLAYER_STAND_STILL_TIME,x
@@ -1967,22 +1975,29 @@ PlayerControl
           lda #0
           sta PLAYER_STAND_STILL_TIME,x
           
+.HandleSam          
 .HandleFire          
           cpx #1
           beq .FireSam
           
           ;handle shooting/shoot pause
           lda PLAYER_SHOT_PAUSE,x
-          bne .CannotShoot
+          beq .CanShoot
+          jmp .CannotShoot
           
+.CanShoot          
           lda PLAYER_SHELLS
-          beq .FireDone
+          bne .HasShells
+          jmp .FireDone
                     
+.HasShells                    
           ldy PLAYER_JOYSTICK_PORT,x
           lda JOYSTICK_PORT_II,y
           and #$10
-          bne .NotFirePushed
+          beq .FirePushed
+          jmp .NotFirePushed
           
+.FirePushed          
           jsr FireShot
           jmp .FireDone
 
@@ -2001,6 +2016,26 @@ PlayerControl
           beq .NoEnemyHeld
           
           ;Sam needs to keep pressed
+          
+          ldy SPRITE_HELD
+          dey
+          ldx SPRITE_ACTIVE,y
+          lda IS_TYPE_ENEMY,x
+          cmp #2
+          bne .NormalHurtByForce
+          
+          ;in 2p mode?
+          ;TODO - if only one player is left?
+          lda GAME_MODE
+          cmp #2
+          bne .NormalHurtByForce
+          
+          ;no further action
+          jmp .NoEnemyHeld
+          
+          
+.NormalHurtByForce          
+          ldx PARAM6
           inc PLAYER_SHOT_PAUSE,x
           
           lda PLAYER_SHOT_PAUSE,x
@@ -2327,8 +2362,11 @@ PickItem
           cpx #1
           beq .SamDoesNotUseFastReload
           
-          lda #200
-          sta PLAYER_FAST_RELOAD
+          lda PLAYER_RELOAD_SPEED
+          cmp #4
+          beq .SpeedHighestAlready
+          inc PLAYER_RELOAD_SPEED
+.SpeedHighestAlready          
           jmp .RemoveItem
           
 .EffectInvincible          
@@ -2544,8 +2582,10 @@ FireShot
 .CheckEnemy          
           stx PARAM2
           lda SPRITE_ACTIVE,x
-          beq .CheckNextEnemy
+          bne +
+          jmp .CheckNextEnemy
 
++
           tax
           lda IS_TYPE_ENEMY,x
           beq .CheckNextEnemy
@@ -2581,9 +2621,41 @@ FireShot
           
 .EnemyHit          
           ;enemy hit!
+          ;is two player enemy?
+          ldy SPRITE_ACTIVE,x
+          lda IS_TYPE_ENEMY,y
+          cmp #2
+          bne .HitEnemy
+          
+          ;in 2p mode?
+          ;TODO - if only one player is left?
+          lda GAME_MODE
+          cmp #2
+          bne .HitEnemy
+          
+          ldy SPRITE_HELD
+          dey
+          sty PARAM1
+          cpx PARAM1
+          beq .HitEnemy
+          
+          ;enemy would be hit, but is not held
+          jmp .ShotDone
+          
+.HitEnemy          
           lda #1
           jsr IncreaseScore
           
+          lda SPRITE_HELD
+          sta PARAM1
+          dec PARAM1
+          cpx PARAM1
+          bne .NotHeldEnemy
+          
+          lda #0
+          sta SPRITE_HELD
+          
+.NotHeldEnemy          
           dec SPRITE_HP,x
           lda SPRITE_HP,x
           beq .EnemyKilled
@@ -2778,7 +2850,27 @@ SamUseForce
 .EnemyHit          
           ;enemy hit!
           stx SPRITE_HELD
+          ldy SPRITE_HELD
           inc SPRITE_HELD
+          
+          ldx SPRITE_ACTIVE,y
+          lda IS_TYPE_ENEMY,x
+          cmp #2
+          bne .HitEnemy
+          
+          ;in 2p mode?
+          ;TODO - if only one player is left?
+          lda GAME_MODE
+          cmp #2
+          bne .HitEnemy
+          
+          ;no further action
+          lda #1
+          rts
+          
+.HitEnemy
+          ldx SPRITE_HELD
+          dex
           
           ;call enemy hit behaviour
           ldy SPRITE_ACTIVE,x
@@ -8544,8 +8636,12 @@ PLAYER_SHELLS_MAX
           !byte 2
 PLAYER_STAND_STILL_TIME
           !byte 0,0
-PLAYER_FAST_RELOAD
-          !byte 0,0
+PLAYER_RELOAD_SPEED
+          !byte 0
+RELOAD_SPEED
+          !byte 1,1,1,1,1
+RELOAD_SPEED_MAX
+          !byte 40,35,30,25,20
 PLAYER_INVINCIBLE          
           !byte 0,0
 PLAYER_JOYSTICK_PORT
@@ -8650,6 +8746,7 @@ ENEMY_BEHAVIOUR_TABLE_LO
           !byte <BehaviourImpala      ;impala 3
           !byte <BehaviourImpala      ;impala driver
           !byte <BehaviourImpalaDebris;impala debris
+          !byte <BehaviourWolf
           
 ENEMY_BEHAVIOUR_TABLE_HI
           !byte >PlayerControl
@@ -8677,6 +8774,7 @@ ENEMY_BEHAVIOUR_TABLE_HI
           !byte >BehaviourImpala      ;impala 3
           !byte >BehaviourImpala      ;impala driver
           !byte >BehaviourImpalaDebris;impala debris
+          !byte >BehaviourWolf
           
 ;behaviour for an enemy being hit          
 ENEMY_HIT_BEHAVIOUR_TABLE_LO          
@@ -8704,6 +8802,8 @@ ENEMY_HIT_BEHAVIOUR_TABLE_LO
           !byte <BehaviourNone        ;impala 3
           !byte <BehaviourNone        ;impala driver
           !byte <BehaviourNone        ;impala debris
+          !byte <HitBehaviourHurt     ;wolf 2p
+          
           
 ENEMY_HIT_BEHAVIOUR_TABLE_HI
           !byte >HitBehaviourHurt     ;bat diagonal
@@ -8730,6 +8830,7 @@ ENEMY_HIT_BEHAVIOUR_TABLE_HI
           !byte >BehaviourNone        ;impala 3
           !byte >BehaviourNone        ;impala driver
           !byte >BehaviourNone        ;impala debris
+          !byte >HitBehaviourHurt     ;wolf 2p
           
 IS_TYPE_ENEMY
           !byte 0     ;dummy entry for inactive object
@@ -8743,7 +8844,7 @@ IS_TYPE_ENEMY
           !byte 1     ;spider
           !byte 0     ;explosion
           !byte 0     ;player sam
-          !byte 1     ;wolf
+          !byte 2     ;wolf
           !byte 1     ;ghost skeleton
           !byte 1     ;jumping toad
           !byte 1     ;eye
@@ -8758,6 +8859,7 @@ IS_TYPE_ENEMY
           !byte 0     ;impala 3
           !byte 0     ;impala driver
           !byte 0     ;impala debris
+          !byte 1     ;wolf 2p
           
 TYPE_START_SPRITE
           !byte 0     ;dummy entry for inactive object
@@ -8786,6 +8888,7 @@ TYPE_START_SPRITE
           !byte SPRITE_IMPALA_3
           !byte SPRITE_DRIVERS
           !byte SPRITE_DEBRIS_1
+          !byte SPRITE_WOLF_WALK_R_1    ;wolfman 2x
           
 TYPE_START_COLOR
           !byte 0
@@ -8814,6 +8917,7 @@ TYPE_START_COLOR
           !byte 0     ;impala 3
           !byte 9     ;impala driver
           !byte 9     ;impala debris
+          !byte 14    ;wolf 2p
           
 TYPE_START_MULTICOLOR
           !byte 0     ;dummy
@@ -8842,6 +8946,7 @@ TYPE_START_MULTICOLOR
           !byte 1     ;impala 3
           !byte 1     ;impala driver
           !byte 0     ;impala debris
+          !byte 1     ;wolf 2p
           
 TYPE_START_HP
           !byte 0     ;dummy
@@ -8870,6 +8975,7 @@ TYPE_START_HP
           !byte 0     ;impala 3
           !byte 0     ;impala driver
           !byte 0     ;impala debris
+          !byte 3     ;wolf 2p
           
 TYPE_ANNOYED_COLOR
           !byte 0     ;dummy
@@ -8898,6 +9004,7 @@ TYPE_ANNOYED_COLOR
           !byte 0     ;impala 3
           !byte 0     ;impala driver
           !byte 0     ;impala debris
+          !byte 10    ;wolf 2p
           
           
 ;enemy start direction, 2 bits per dir.
@@ -8942,6 +9049,7 @@ TYPE_START_DIRECTION
           !byte 0             ;impala 3
           !byte 0             ;impala driver
           !byte 0             ;impala debris
+          !byte %00000010     ;wolf 2p
           
 TYPE_START_STATE
           !byte 0             ;dummy
@@ -8970,6 +9078,7 @@ TYPE_START_STATE
           !byte 0             ;impala 3
           !byte 0             ;impala driver
           !byte 0             ;impala debris
+          !byte 0             ;wolf 2p
           
 TYPE_START_DELTA_Y
           !byte 0     ;dummy
@@ -8998,6 +9107,7 @@ TYPE_START_DELTA_Y
           !byte 0     ;impala 3
           !byte 0     ;impala driver
           !byte 0     ;impala debris
+          !byte 2     ;wolf 2p
           
 BAT_ANIMATION
           !byte SPRITE_BAT_1
