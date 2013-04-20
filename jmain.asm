@@ -49,7 +49,7 @@ CIA_PRA                 = $dd00
 PROCESSOR_PORT          = $01
 
 ;START_LEVEL             = 0
-START_LEVEL             = 65
+START_LEVEL             = 0
 
 MUSIC_IN_GAME_TUNE		    = $00
 MUSIC_TITLE_TUNE			     = $01
@@ -1473,6 +1473,14 @@ GameFlowControl
           cmp #10
           beq .ShowStory
           cmp #21
+          beq .ShowStory
+          cmp #32
+          beq .ShowStory
+          cmp #43
+          beq .ShowStory
+          cmp #54
+          beq .ShowStory
+          cmp #65
           beq .ShowStory
           jmp .NoStory
         
@@ -8872,6 +8880,10 @@ BOSS_MOVE_SPEED = 1
           and #$03
           bne .NoAnimUpdate
           
+          lda SPRITE_POINTER_BASE,x
+          eor #1
+          sta SPRITE_POINTER_BASE,x
+          
 .NoAnimUpdate   
           lda SPRITE_STATE,x
           bne +
@@ -9072,7 +9084,11 @@ BOSS_MOVE_SPEED = 1
           lda DELAYED_GENERIC_COUNTER
           and #$03
           bne .NoAnimUpdate
-          
+
+          lda SPRITE_POINTER_BASE,x
+          eor #1
+          sta SPRITE_POINTER_BASE,x
+
 .NoAnimUpdate   
           lda SPRITE_STATE,x
           beq .Attack
@@ -12472,38 +12488,111 @@ CHAPTER
 CHAPTER_PAGES_LO
           !byte <TEXT_STORY_1
           !byte <TEXT_STORY_2
+          !byte <TEXT_STORY_3
+          !byte <TEXT_STORY_4
+          !byte <TEXT_STORY_5
+          !byte <TEXT_STORY_6
+          !byte <TEXT_STORY_7
 CHAPTER_PAGES_HI
           !byte >TEXT_STORY_1
           !byte >TEXT_STORY_2
+          !byte >TEXT_STORY_3
+          !byte >TEXT_STORY_4
+          !byte >TEXT_STORY_5
+          !byte >TEXT_STORY_6
+          !byte >TEXT_STORY_7
 CHAPTER_END_PAGES_LO
           !byte <TEXT_CHAPTER_1_END
           !byte <TEXT_CHAPTER_2_END
+          !byte <TEXT_CHAPTER_3_END
+          !byte <TEXT_CHAPTER_4_END
+          !byte <TEXT_CHAPTER_5_END
+          !byte <TEXT_CHAPTER_6_END
 CHAPTER_END_PAGES_HI
           !byte >TEXT_CHAPTER_1_END
           !byte >TEXT_CHAPTER_2_END
+          !byte >TEXT_CHAPTER_3_END
+          !byte >TEXT_CHAPTER_4_END
+          !byte >TEXT_CHAPTER_5_END
+          !byte >TEXT_CHAPTER_6_END
           
+          
+!ct '.',91,'?',31,',',59
           
 TEXT_STORY_1
+          !text "GREENFIELD, OHIO.-"
           !text "A LOCAL NEWSPAPER MENTIONS SEVERAL-"
-          !text "MISSING PEOPLE",59," THIS SEEMS TO BE A-"
-          !text "RECURRING PATTERN EVERY 44 YEARS",59,"-"
+          !text "MISSING PEOPLE. THERE SEEMS TO BE A-"
+          !text "RECURRING PATTERN EVERY 44 YEARS.-"
           !text "WE SHOULD INVESTIGATE THE TOWN-"
-          !text "CEMETERY",59,"*"
+          !text "CEMETERY.*"
           
 TEXT_CHAPTER_1_END
-          !text "WHAT THE HELL WAS THAT SHADOW",31,"--"
-          !text "I HOPE THAT WAS THE LAST WE SAW OF IT*"
+          !text "WHAT THE HELL WAS THAT SHADOW?--"
+          !text "WHATEVER IT WAS. IT IS GONE FOR-"
+          !text "GOOD*"
 
 TEXT_STORY_2
-          !text "WE HAVE GOT A HINT BY OTHER HUNTERS-"
-          !text "ABOUT WEIRD VOICES AND SHRIEKS-"
-          !text "IN THE WOODS",59," THERE ALSO SEEM-"
-          !text "TO BE SOME MISSING HIKERS",59,"*"
+          !text "ULYSSES, KANSAS.-"
+          !text "A STUDENT HAS BEEN FOUND DEAD IN-"
+          !text "AN ABANDONED HOUSE IN THE WOODS.-"
+          !text "SOMEONE OR SOMETHING HUNG HER AND-"
+          !text "DEMONIC MARKS WERE ALL ABOUT.*"
 
 TEXT_CHAPTER_2_END
           !text "ANOTHER SHADOW!--"
           !text "SOMETHING IS BREWING, AND I DO NOT LIKE-"
           !text "IT*"
+
+TEXT_STORY_3
+          !text "SALEM, UTAH.-"
+          !text "SEVERAL WORKERS WERE FOUND DEAD IN-"
+          !text "THE SEWERS. THEIR BLOOD WAS-"
+          !text "COMPLETELY GONE.*"
+
+TEXT_CHAPTER_3_END
+          !text "THAT WAS DIFFERENT.-"
+          !text "DID NOT MAKE IT ALIVE AS WELL THOUGH*"
+
+TEXT_STORY_4
+          !text "WILBURTON, OKLAHOMA.-"
+          !text "A GROUP OF TOURISTS WENT MISSING-"
+          !text "IN ROBBERS CAVE.*"
+
+TEXT_CHAPTER_4_END
+          !text "THERE WERE THIS DEMON MARKS AGAIN.-"
+          !text "WE ARE ON TO SOMETHING BIG*"
+
+TEXT_STORY_5
+          !text "BORREGO, SPRINGS.-"
+          !text "SEVERAL CITIZENS HAVE BEEN KILLED BY-"
+          !text "SLIMEY BEASTS. POLICE SUSPECT THE-"
+          !text "SOURCE SOMEWHERE IN THE DESERT.*"
+
+TEXT_CHAPTER_5_END
+          !text "THERE WERE THIS DEMON MARKS AGAIN.-"
+          !text "WE ARE ON TO SOMETHING BIG.-"
+          !text "THEY FORM A PATTERN WITH A FEW-"
+          !text "SPOTS STILL MISSING. THE NEXT-"
+          !text "SPOT IS TARGETTING VIRGINIA!*"
+
+TEXT_STORY_6
+          !text "LURAY, VIRGINIA.-"
+          !text "THEY SAY A CHINESE JUNK HAS SUNK-"
+          !text "IN AN UNDERGROUND LAKE HERE. THE-"
+          !text "SAILORS STILL HAUNT THE CAVE.*"
+
+TEXT_CHAPTER_6_END
+          !text "THE DEMON MARK PATTERN IS COMPLETE!-"
+          !text "IT POINTS TO AN ABANDONED GOLD-"
+          !text "MINER TOWN, ELKHORN, MONTANA.*"
+
+TEXT_STORY_7
+          !text "ELKHORN, MONTANA.-"
+          !text "THE WHOLE TOWN IS A GIANT CAGE-"
+          !text "PROTECTING A WELL IN THE CENTRE*"
+          !text "WE WILL HAVE TO GO DOWN THERE.*"
+
 
 COLOR_FADE_POS
           !byte 0
