@@ -48,8 +48,7 @@ CIA_PRA                 = $dd00
 
 PROCESSOR_PORT          = $01
 
-;START_LEVEL             = 0
-START_LEVEL             = 66
+START_LEVEL             = 0
 
 MUSIC_IN_GAME_TUNE		    = $00
 MUSIC_TITLE_TUNE			     = $01
@@ -359,8 +358,9 @@ ITEM_HEALTH             = 1
 ITEM_FAST_RELOAD        = 2
 ITEM_INVINCIBLE         = 3
 ITEM_FORCE_RANGE        = 4
+ITEM_SUPER_BULLET       = 5
 
-ITEM_MAX                = 5
+ITEM_MAX                = 6
 ITEM_NONE               = 255
 
 ;number of possible items
@@ -783,6 +783,7 @@ TitleScreenWithoutIRQ
           sta PLAYER_LIVES + 1
           lda #0
           sta PLAYER_RELOAD_SPEED
+          sta SUPER_BULLET
           lda #5
           sta PLAYER_FORCE_RANGE
           lda #2
@@ -1440,7 +1441,7 @@ GameFlowControl
           bne .NoTimedActionYet
           lda #0
           sta DELAYED_GENERIC_COUNTER
-
+          
           ;level done delay
           lda NUMBER_ENEMIES_ALIVE
           bne .NotDoneYet
@@ -2894,6 +2895,8 @@ PickItem
           beq .EffectInvincible
           cmp #ITEM_FORCE_RANGE
           beq .EffectIncForceRange
+          cmp #ITEM_SUPER_BULLET
+          beq .EffectSuperBullet
           
 .SamDoesNotUseBullets          
 .SamDoesNotUseFastReload
@@ -2910,6 +2913,12 @@ PickItem
           
           ldx PARAM6
           rts
+          
+.EffectSuperBullet          
+          cpx #1
+          beq .SamDoesNotUseBullets
+          
+          inc SUPER_BULLET
 
 .EffectBullet
           cpx #1
@@ -3128,7 +3137,17 @@ FireShot
           
           lda #5
           sta PLAYER_RELOAD_FLASH_POS
+  
+          ;red flash for super bullet
+          lda SUPER_BULLET
+          beq +
+          
+          lda #2
+          jmp ++
+          
++          
           lda #1
+++          
           sta VIC_BACKGROUND_COLOR
           
           ;frame delay until next shot
@@ -3179,14 +3198,18 @@ FireShot
 +
           tax
           lda IS_TYPE_ENEMY,x
-          beq .CheckNextEnemy
+          bne +
+          jmp .CheckNextEnemy
 
++
           ldx PARAM2
           ;is vulnerable?          
           lda SPRITE_STATE,x
           cmp #128
-          bpl .CheckNextEnemy
+          bmi +
+          jmp .CheckNextEnemy
 
++
           ;sprite pos matches on x?
           sty PARAM1
           lda SPRITE_CHAR_POS_X,x
@@ -3247,6 +3270,15 @@ FireShot
           sta SPRITE_HELD
           
 .NotHeldEnemy          
+          lda SUPER_BULLET
+          beq +
+          
+          ;directly kill enemy
+          dec SUPER_BULLET
+          jmp .EnemyKilled
+          
++          
+          lda SPRITE_HP,x
           dec SPRITE_HP,x
           lda SPRITE_HP,x
           beq .EnemyKilled
@@ -12579,21 +12611,24 @@ DELAYED_GENERIC_COUNTER_WO_WATER
           !byte 0
           
 ITEM_CHAR_UL
-          !byte 4,8,16,20,106
+          !byte 4,8,16,20,106,4
 ITEM_COLOR_UL
-          !byte 7,2,1,1,2
+          !byte 7,2,1,1,2,1
 ITEM_CHAR_UR
-          !byte 5,9,17,21,107
+          !byte 5,9,17,21,107,5
 ITEM_COLOR_UR
-          !byte 4,2,2,7,1
+          !byte 4,2,2,7,1,3
 ITEM_CHAR_LL
-          !byte 6,10,18,22,108
+          !byte 6,10,18,22,108,6
 ITEM_COLOR_LL
-          !byte 7,2,2,7,2
+          !byte 7,2,2,7,2,3
 ITEM_CHAR_LR
-          !byte 7,11,19,23,109
+          !byte 7,11,19,23,109,7
 ITEM_COLOR_LR
-          !byte 4,2,2,4,1
+          !byte 4,2,2,4,1,6
+          
+SUPER_BULLET
+          !byte 0
           
 PLAYER_START_POS_X
           !byte 0,0
