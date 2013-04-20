@@ -49,8 +49,8 @@ CIA_PRA                 = $dd00
 
 PROCESSOR_PORT          = $01
 
-;START_LEVEL             = 0
-START_LEVEL             = 71
+START_LEVEL             = 0
+;START_LEVEL             = 71
 
 MUSIC_IN_GAME_TUNE		    = $00
 MUSIC_TITLE_TUNE			     = $01
@@ -543,7 +543,7 @@ BEAM_TYPE_LIGHT2        = 3
           
           ;bitmap multicolor          
           lda #$18
-          sta $d016
+          sta VIC_CONTROL
 
           
 ;------------------------------------------------------------
@@ -2238,8 +2238,7 @@ CheckForHighscore
           
 -          
           lda PATH_8_DY,x
-          and #$80
-          bne +
+          bmi +
  
           lda PATH_8_DY,x
           clc
@@ -5755,7 +5754,18 @@ BehaviourBatDiagonal
           jsr HandleHitBack
           beq .NoHitBack
           rts
+
+.RandomDir
+          jsr GenerateRandomNumber
+          and #$07
+          sta SPRITE_DIRECTION,x
+          inc SPRITE_DIRECTION,x
           
+          lda #0
+          sta SPRITE_MOVE_POS,x
+          rts
+
+
 .NoHitBack          
           lda DELAYED_GENERIC_COUNTER
           and #$03
@@ -5771,6 +5781,196 @@ BehaviourBatDiagonal
           sta SPRITE_POINTER_BASE,x
           
 .NoAnimUpdate          
+          lda SPRITE_DIRECTION,x
+          beq .RandomDir
+          cmp #1
+          beq .MoveCCWWN
+          cmp #2
+          beq .MoveCCWSW
+          cmp #3
+          beq .MoveCCWES
+          cmp #4
+          beq .MoveCCWNE
+          cmp #5
+          bne +
+          jmp .MoveCWWS
++          
+          cmp #6
+          bne +
+          jmp .MoveCWNW
++          
+          cmp #7
+          bne +
+          jmp .MoveCWEN
++          
+          cmp #8
+          bne +
+          jmp .MoveCWSE
++          
+.NextStep          
+          inc SPRITE_MOVE_POS,x
+          lda SPRITE_MOVE_POS,x
+          cmp #16
+          bne +
+          
+          lda #0
+          sta SPRITE_DIRECTION,x
+          sta SPRITE_MOVE_POS,x
++
+          rts
+          
+.MoveCCWWN
+          ldy SPRITE_MOVE_POS,x
+          lda PATH_CURVE,y
+          sta PARAM3
+          jsr .TryMoveUp
+          
+          ldy SPRITE_MOVE_POS,x
+          lda PATH_CURVE_R,y
+          sta PARAM3
+          jsr .TryMoveRight
+          jmp .NextStep
+
+.MoveCCWSW
+          ldy SPRITE_MOVE_POS,x
+          lda PATH_CURVE,y
+          sta PARAM3
+          jsr .TryMoveLeft
+          
+          ldy SPRITE_MOVE_POS,x
+          lda PATH_CURVE_R,y
+          sta PARAM3
+          jsr .TryMoveUp
+          jmp .NextStep
+
+.MoveCCWES
+          ldy SPRITE_MOVE_POS,x
+          lda PATH_CURVE,y
+          sta PARAM3
+          jsr .TryMoveDown
+          
+          ldy SPRITE_MOVE_POS,x
+          lda PATH_CURVE_R,y
+          sta PARAM3
+          jsr .TryMoveLeft
+          jmp .NextStep
+
+.MoveCCWNE
+          ldy SPRITE_MOVE_POS,x
+          lda PATH_CURVE,y
+          sta PARAM3
+          jsr .TryMoveRight
+          
+          ldy SPRITE_MOVE_POS,x
+          lda PATH_CURVE_R,y
+          sta PARAM3
+          jsr .TryMoveDown
+          jmp .NextStep
+
+.MoveCWWS
+          ldy SPRITE_MOVE_POS,x
+          lda PATH_CURVE,y
+          sta PARAM3
+          jsr .TryMoveDown
+          
+          ldy SPRITE_MOVE_POS,x
+          lda PATH_CURVE_R,y
+          sta PARAM3
+          jsr .TryMoveRight
+          jmp .NextStep
+
+.MoveCWNW
+          ldy SPRITE_MOVE_POS,x
+          lda PATH_CURVE,y
+          sta PARAM3
+          jsr .TryMoveLeft
+          
+          ldy SPRITE_MOVE_POS,x
+          lda PATH_CURVE_R,y
+          sta PARAM3
+          jsr .TryMoveDown
+          jmp .NextStep
+
+.MoveCWEN
+          ldy SPRITE_MOVE_POS,x
+          lda PATH_CURVE,y
+          sta PARAM3
+          jsr .TryMoveUp
+          
+          ldy SPRITE_MOVE_POS,x
+          lda PATH_CURVE_R,y
+          sta PARAM3
+          jsr .TryMoveLeft
+          jmp .NextStep
+
+.MoveCWSE
+          ldy SPRITE_MOVE_POS,x
+          lda PATH_CURVE,y
+          sta PARAM3
+          jsr .TryMoveRight
+          
+          ldy SPRITE_MOVE_POS,x
+          lda PATH_CURVE_R,y
+          sta PARAM3
+          jsr .TryMoveUp
+          jmp .NextStep
+
+
+.Blocked
+          lda #0
+          sta SPRITE_DIRECTION,x
+          rts
+
+.TryMoveUp
+          beq +
+          
+          jsr ObjectMoveUpBlocking
+          beq .Blocked
+          
+          dec PARAM3
+          jmp .TryMoveUp
+          
++     
+          rts
+          
+.TryMoveDown
+          beq +
+          
+          jsr ObjectMoveDownBlocking
+          beq .Blocked
+          
+          dec PARAM3
+          jmp .TryMoveDown
+          
++     
+          rts
+          
+.TryMoveLeft
+          beq +
+          
+          jsr ObjectMoveLeftBlocking
+          beq .Blocked
+          
+          dec PARAM3
+          jmp .TryMoveLeft
+          
++     
+          rts
+          
+.TryMoveRight
+          beq +
+          
+          jsr ObjectMoveRightBlocking
+          beq .Blocked
+          
+          dec PARAM3
+          jmp .TryMoveRight
+          
++     
+          rts
+          
+
+!if 0 {
           lda SPRITE_DIRECTION,x
           beq .MoveRight
           
@@ -5809,7 +6009,7 @@ BehaviourBatDiagonal
           sta SPRITE_DIRECTION_Y,x
           rts
  
- 
+}
           
 
  
@@ -6404,9 +6604,9 @@ BehaviourBatVanishing
 
           ;position diagonal above/below player
           lda SPRITE_CHAR_POS_X
-          cmp #10
+          cmp #SPAWN_LEFT_BORDER
           bcc .SpawnOnRight
-          cmp #30
+          cmp #SPAWN_RIGHT_BORDER
           bcs .SpawnOnLeft
           
           ;randomly choose
@@ -9786,8 +9986,7 @@ BOSS_MOVE_SPEED = 1
           lda PATH_DY,y
           beq .NoYMoveNeeded
           sta PARAM1
-          and #$80
-          beq .MoveDown
+          bpl .MoveDown
           
           ;move up
           lda PARAM1
@@ -12086,6 +12285,11 @@ BuildScreen
 
           lda #0
           sta LEVEL_CONFIG
+          lda #10
+          sta SPAWN_LEFT_BORDER
+          lda #30
+          sta SPAWN_RIGHT_BORDER
+          
           ;get pointer to real level data from table
           lda LEVEL_NR
           asl
@@ -12126,7 +12330,17 @@ BuildScreen
           sta VIC_MEMORY_CONTROL
 
           jsr DisplayLevelNumber
+ 
+          ;adjust spawn border
+          lda LEVEL_CONFIG
+          and #$04
+          beq +
           
+          lda #15
+          sta SPAWN_LEFT_BORDER
+          lda #25
+          sta SPAWN_RIGHT_BORDER
++          
           rts
           
 .SetCharSet1
@@ -14668,6 +14882,41 @@ HAND_COLOR_TABLE
 BOSS_FLASH_TABLE
           !byte 0,11,12,15,1,15,12,11
 
+PATH_CURVE
+          !byte 0
+          !byte 0
+          !byte 1
+          !byte 0
+          !byte 0
+          !byte 1
+          !byte 0
+          !byte 1
+          !byte 0
+          !byte 1
+          !byte 1
+          !byte 1
+          !byte 1
+          !byte 1
+          !byte 1
+          !byte 1
+PATH_CURVE_R
+          !byte 1
+          !byte 1
+          !byte 1
+          !byte 1
+          !byte 1
+          !byte 1
+          !byte 1
+          !byte 0
+          !byte 1
+          !byte 0
+          !byte 1
+          !byte 0
+          !byte 0
+          !byte 1
+          !byte 0
+          !byte 0
+
 PATH_8_DY
           !byte 0
           !byte 1
@@ -15072,6 +15321,11 @@ TWO_PLAYER_MODE_ACTIVE
           !byte 0
 SFX_MODE
           !byte 0
+;for vanishing bats to make sure they stay inside the level          
+SPAWN_LEFT_BORDER
+          !byte 10
+SPAWN_RIGHT_BORDER
+          !byte 30
           
 !source "level_data.asm"
 
