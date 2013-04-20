@@ -64,8 +64,13 @@ FALL_TABLE_SIZE         = 10
 
 ;level data constants
 LD_END                  = 0
-LD_LINE_H               = 1
-LD_LINE_V               = 2
+LD_LINE_H               = 1     ;data contains x,y,width,char,color
+LD_LINE_V               = 2     ;data contains x,y,height,char,color
+LD_OBJECT               = 3     ;data contains x,y,type
+
+;object type constants
+TYPE_PLAYER             = 1
+TYPE_ENEMY              = 2
 
 ;this creates a basic start
 *=$0801
@@ -140,38 +145,33 @@ LD_LINE_V               = 2
           lda VIC_CONTROL
           ora #$10
           sta VIC_CONTROL
-          
-          ;setup level
-          lda #0
-          sta LEVEL_NR
-          jsr BuildScreen
-          
+
           ;set sprite flags
           lda #0
           sta VIC_SPRITE_X_EXTEND
-          
+
           ;init sprite 1 pos
           lda #5
           sta PARAM1
           lda #4
           sta PARAM2
           ldx #0
-          
+
           jsr CalcSpritePosFromCharPos
-          
-          lda #100
-          ;sta VIC_SPRITE_X_POS
-          ;sta VIC_SPRITE_Y_POS
-          ;sta SPRITE_POS_X
-          ;sta SPRITE_POS_Y
-          
+
           ;set sprite image
           lda #SPRITE_PLAYER
           sta SPRITE_POINTER_BASE
-          
+
           ;enable sprite 1
           lda #1
           sta VIC_SPRITE_ENABLE
+
+          ;setup level
+          lda #0
+          sta LEVEL_NR
+          jsr BuildScreen
+          
           
 
 ;------------------------------------------------------------
@@ -695,6 +695,7 @@ IsCharBlockingFall
 ;------------------------------------------------------------
 ;CalcSpritePosFromCharPos
 ;calculates the real sprite coordinates from screen char pos
+;and sets them directly
 ;PARAM1 = char_pos_x
 ;PARAM2 = char_pos_y
 ;X      = sprite index
@@ -792,6 +793,10 @@ BuildScreen
           beq .LineH
           cmp #LD_LINE_V
           beq .LineV
+          cmp #LD_OBJECT
+          bne .NotAnObject
+          jmp .Object
+.NotAnObject  
           
 .LevelComplete          
           rts
@@ -929,6 +934,47 @@ BuildScreen
           
           jmp .NextLevelData
           
+.Object
+          ;X pos
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta PARAM1 
+          
+          ;Y pos
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta PARAM2
+
+          ;type
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta PARAM3
+
+          ;store y for later
+          tya
+          pha
+          
+          ;add object to sprite array
+          jsr FindEmptySpriteSlot
+          beq .NoFreeSlot
+          
+          lda PARAM3
+          sta SPRITE_ACTIVE,x
+          
+          ;PARAM1 and PARAM2 hold x,y already
+          jsr CalcSpritePosFromCharPos
+          
+          ;enable sprite
+          lda BIT_TABLE,x
+          ora VIC_SPRITE_ENABLE
+          sta VIC_SPRITE_ENABLE
+          
+          lda #SPRITE_PLAYER
+          sta SPRITE_POINTER_BASE,x
+          
+.NoFreeSlot                    
+          jmp .NextLevelData
+          
           
 !zone WaitFrame
           ;wait for the raster to reach line $f8
@@ -951,6 +997,30 @@ WaitFrame
 
 
 ;------------------------------------------------------------
+;Looks for an empty sprite slot, returns in X
+;#1 in A when empty slot found, #0 when full
+;------------------------------------------------------------
+
+!zone FindEmptySpriteSlot
+FindEmptySpriteSlot
+          ldx #0
+.CheckSlot          
+          lda SPRITE_ACTIVE,x
+          beq .FoundSlot
+          
+          inx
+          cpx #8
+          bne .CheckSlot
+          
+          lda #0
+          rts
+          
+.FoundSlot
+          lda #1
+          rts
+
+
+;------------------------------------------------------------
 ;clears the play area of the screen
 ;A = char
 ;Y = color
@@ -958,28 +1028,28 @@ WaitFrame
 
 !zone ClearPlayScreen
 ClearPlayScreen
-            ldx #$00
+          ldx #$00
 .ClearLoop          
-            sta SCREEN_CHAR,x
-            sta SCREEN_CHAR + 220,x
-            sta SCREEN_CHAR + 440,x
-            sta SCREEN_CHAR + 660,x
-            inx
-            cpx #220
-            bne .ClearLoop
-            
-            tya
-            ldx #$00
+          sta SCREEN_CHAR,x
+          sta SCREEN_CHAR + 220,x
+          sta SCREEN_CHAR + 440,x
+          sta SCREEN_CHAR + 660,x
+          inx
+          cpx #220
+          bne .ClearLoop
+
+          tya
+          ldx #$00
 .ColorLoop          
-            sta $d800,x
-            sta $d800 + 220,x
-            sta $d800 + 440,x
-            sta $d800 + 660,x
-            inx
-            cpx #220
-            bne .ColorLoop
-            
-            rts
+          sta $d800,x
+          sta $d800 + 220,x
+          sta $d800 + 440,x
+          sta $d800 + 660,x
+          inx
+          cpx #220
+          bne .ColorLoop
+
+          rts
 
 
 ;------------------------------------------------------------
@@ -1070,6 +1140,9 @@ LEVEL_1
           !byte LD_LINE_H,30,12,9,97,13
           !byte LD_LINE_H,10,19,20,96,13
           !byte LD_LINE_V,7,6,4,128,9
+          !byte LD_OBJECT,5,4,TYPE_PLAYER
+          !byte LD_OBJECT,34,11,TYPE_ENEMY
+          !byte LD_OBJECT,10,18,TYPE_ENEMY
           !byte LD_END
 
 
@@ -1112,6 +1185,9 @@ SPRITE_CHAR_POS_Y_DELTA
           !byte 0,0,0,0,0,0,0,0
 SPRITE_POS_Y
           !byte 0,0,0,0,0,0,0,0
+SPRITE_ACTIVE
+          !byte 0,0,0,0,0,0,0,0
+          
 BIT_TABLE
           !byte 1,2,4,8,16,32,64,128
           
