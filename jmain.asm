@@ -362,7 +362,6 @@ TYPE_BOSS5              = 32
 TYPE_BOSS6              = 33
 TYPE_BOSS7              = 34
 TYPE_BOSS_PART          = 35
-TYPE_EXTRO_IMPALA       = 36
 
 OBJECT_HEIGHT           = 8 * 2
 
@@ -907,6 +906,11 @@ DisplayScoreDisplay
           sta ZEROPAGE_POINTER_1
           lda #>TEXT_DISPLAY_DEAN_AND_SAM
           sta ZEROPAGE_POINTER_1 + 1
+          
+          ldx #0
+          jsr DisplayLiveNumber
+          ldx #1
+          jsr DisplayLiveNumber
           jmp .DisplayDisplay
 
 .DeanOnly        
@@ -917,6 +921,8 @@ DisplayScoreDisplay
           sta ZEROPAGE_POINTER_1
           lda #>TEXT_DISPLAY_DEAN_ONLY
           sta ZEROPAGE_POINTER_1 + 1
+          ldx #0
+          jsr DisplayLiveNumber
           jmp .DisplayDisplay
 
 .SamOnly        
@@ -927,6 +933,8 @@ DisplayScoreDisplay
           sta ZEROPAGE_POINTER_1
           lda #>TEXT_DISPLAY_SAM_ONLY
           sta ZEROPAGE_POINTER_1 + 1
+          ldx #1
+          jsr DisplayLiveNumber
           jmp .DisplayDisplay
 
 .DisplayDisplay
@@ -1057,6 +1065,8 @@ ShowChapter
           sta VIC_SPRITE_ENABLE
           sta VIC_SPRITE_X_EXTEND
           sta SPRITE_POS_X_EXTEND
+          sta VIC_SPRITE_EXPAND_X
+          sta VIC_SPRITE_EXPAND_Y
           
           lda #1
           sta PARAM1
@@ -1797,8 +1807,8 @@ GoToNextLevel
           
           lda #$1b
           sta VIC_CONTROL_MODE
-          rts
 
+          jmp DisplayScoreDisplay      
 
           
 
@@ -3820,7 +3830,9 @@ KillEnemy
 .WasNotHeld          
           ldy SPRITE_ACTIVE,x
           lda IS_TYPE_ENEMY,y
-          beq .NoEnemy
+          bne +
+          jmp .NoEnemy
++          
           
           dec NUMBER_ENEMIES_ALIVE
           
@@ -3835,11 +3847,47 @@ KillEnemy
           jsr RestoreBeamHV
 
 +
-
-.NoEnemy          
           cpy #TYPE_BOSS_PART
-          bne ++
+          bne .NotABossPart
           
+          ;find out proper beam to remove
+          stx CURRENT_SUB_INDEX
+          
+          ;remove beam
+          ldx #2
+          
+          lda #0
+          sta PARAM3
+          lda SPRITE_CHAR_POS_Y,x
+          clc 
+          adc #3
+          sta PARAM4
+          lda #39
+          sta PARAM5
+          jsr RestoreBeamHSegment
+          
+          lda SPRITE_CHAR_POS_X,x
+          sec
+          sbc #1
+          sta PARAM3
+          lda SPRITE_CHAR_POS_Y,x
+          clc 
+          adc #8
+          sta PARAM4
+          jsr RestoreBeamDiagonalLLUR
+          
+          lda SPRITE_CHAR_POS_X,x
+          clc
+          adc #2
+          sta PARAM3
+          lda SPRITE_CHAR_POS_Y,x
+          clc 
+          adc #8
+          sta PARAM4
+          jsr RestoreBeamDiagonalULLR
+
+          ldx CURRENT_SUB_INDEX
+
           inc BOSS_PARTS_KILLED
           lda BOSS_PARTS_KILLED
           cmp #5
@@ -3876,6 +3924,9 @@ KillEnemy
 +          
           lda #0
           sta SPRITE_STATE,y
+.NotABossPart          
+          
+.NoEnemy                    
 ++
           lda #TYPE_EXPLOSION
           sta SPRITE_ACTIVE,x
@@ -4710,114 +4761,8 @@ ObjectWalkOrJumpLeft
           rts
 
 
-;------------------------------------------------------------
-;checks if an object can walk or jump left (jump if would fall off)
-;x = object index
-;returns 0 if blocked
-;returns 1 if possible
-;returns 2 if jump required (not blocked, but in front of hole)
-;------------------------------------------------------------
-!zone CanWalkOrJumpLeft
-CanWalkOrJumpLeft
-          ldy SPRITE_CHAR_POS_Y,x
-          dey
-          lda SCREEN_LINE_OFFSET_TABLE_LO,y
-          sta ZEROPAGE_POINTER_1
-          lda SCREEN_BACK_LINE_OFFSET_TABLE_HI,y
-          sta ZEROPAGE_POINTER_1 + 1
-          
-          ldy SPRITE_CHAR_POS_X,x
-          dey
-          
-          lda (ZEROPAGE_POINTER_1),y
-          
-          jsr IsCharBlocking
-          bne .BlockedLeft
-          
-          tya
-          clc
-          adc #40
-          tay
-          lda (ZEROPAGE_POINTER_1),y
-          jsr IsCharBlocking
-          bne .BlockedLeft
-
-          ;is a hole in front          
-          ldy SPRITE_CHAR_POS_Y,x
-          lda SCREEN_LINE_OFFSET_TABLE_LO,y
-          sta ZEROPAGE_POINTER_1
-          lda SCREEN_BACK_LINE_OFFSET_TABLE_HI,y
-          sta ZEROPAGE_POINTER_1 + 1
-          
-          lda SPRITE_CHAR_POS_X,x
-          clc
-          adc #39
-          tay
-          
-          lda (ZEROPAGE_POINTER_1),y
-          jsr IsCharBlockingFall
-          bne .NoHole
-
-          lda #2
-          rts
-          
-.NoHole          
-          lda #1
-          rts
           
           
-.BlockedLeft
-          lda #0
-          rts
-          
-          
-;------------------------------------------------------------
-;walk object right if could fall off jump if blocked turn
-;x = object index
-;------------------------------------------------------------
-!zone ObjectWalkOrJumpRight
-ObjectWalkOrJumpRight
-                    
-          lda SPRITE_CHAR_POS_X_DELTA,x
-          beq .CheckCanMoveRight
-          
-.CanMoveRight
-          inc SPRITE_CHAR_POS_X_DELTA,x
-          
-          lda SPRITE_CHAR_POS_X_DELTA,x
-          cmp #8
-          bne .NoCharStep
-          
-          lda #0
-          sta SPRITE_CHAR_POS_X_DELTA,x
-          inc SPRITE_CHAR_POS_X,x
-          
-.NoCharStep          
-          jsr MoveSpriteRight
-          lda #1
-          rts
-          
-.CheckCanMoveRight
-          jsr CanWalkOrJumpRight
-          beq .Blocked
-          
-          cmp #1
-          beq .CanMoveRight
-
-          ;jump
-          lda SPRITE_JUMP_POS,x
-          bne .CanMoveRight
-          
-          lda #1
-          sta SPRITE_JUMP_POS,x
-          jmp .CanMoveRight
-          
-.Blocked          
-          rts
-          
-          
-
-
 ;place the data at a valid bitmap position, this avoids copying the data        
 * = $2000        
 ;TITLE_LOGO_BMP_DATA
@@ -5070,6 +5015,116 @@ SCREEN_BACK_LINE_OFFSET_TABLE_HI
 MUSIC_PLAYER
 !binary "music.bin",,2
 
+
+;------------------------------------------------------------
+;checks if an object can walk or jump left (jump if would fall off)
+;x = object index
+;returns 0 if blocked
+;returns 1 if possible
+;returns 2 if jump required (not blocked, but in front of hole)
+;------------------------------------------------------------
+!zone CanWalkOrJumpLeft
+CanWalkOrJumpLeft
+          ldy SPRITE_CHAR_POS_Y,x
+          dey
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          lda SCREEN_BACK_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+          
+          ldy SPRITE_CHAR_POS_X,x
+          dey
+          
+          lda (ZEROPAGE_POINTER_1),y
+          
+          jsr IsCharBlocking
+          bne .BlockedLeft
+          
+          tya
+          clc
+          adc #40
+          tay
+          lda (ZEROPAGE_POINTER_1),y
+          jsr IsCharBlocking
+          bne .BlockedLeft
+
+          ;is a hole in front          
+          ldy SPRITE_CHAR_POS_Y,x
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          lda SCREEN_BACK_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+          
+          lda SPRITE_CHAR_POS_X,x
+          clc
+          adc #39
+          tay
+          
+          lda (ZEROPAGE_POINTER_1),y
+          jsr IsCharBlockingFall
+          bne .NoHole
+
+          lda #2
+          rts
+          
+.NoHole          
+          lda #1
+          rts
+          
+          
+.BlockedLeft
+          lda #0
+          rts
+
+
+;------------------------------------------------------------
+;walk object right if could fall off jump if blocked turn
+;x = object index
+;------------------------------------------------------------
+!zone ObjectWalkOrJumpRight
+ObjectWalkOrJumpRight
+                    
+          lda SPRITE_CHAR_POS_X_DELTA,x
+          beq .CheckCanMoveRight
+          
+.CanMoveRight
+          inc SPRITE_CHAR_POS_X_DELTA,x
+          
+          lda SPRITE_CHAR_POS_X_DELTA,x
+          cmp #8
+          bne .NoCharStep
+          
+          lda #0
+          sta SPRITE_CHAR_POS_X_DELTA,x
+          inc SPRITE_CHAR_POS_X,x
+          
+.NoCharStep          
+          jsr MoveSpriteRight
+          lda #1
+          rts
+          
+.CheckCanMoveRight
+          jsr CanWalkOrJumpRight
+          beq .Blocked
+          
+          cmp #1
+          beq .CanMoveRight
+
+          ;jump
+          lda SPRITE_JUMP_POS,x
+          bne .CanMoveRight
+          
+          lda #1
+          sta SPRITE_JUMP_POS,x
+          jmp .CanMoveRight
+          
+.Blocked          
+          rts
+          
+          
+
+
+
 ;------------------------------------------------------------
 ;checks if an object can walk or jump right (jump if would fall off)
 ;x = object index
@@ -5188,98 +5243,6 @@ Extro
           lda #1
           sta BUTTON_RELEASED
           jmp .ExtroLoop
-
-
-!zone BehaviourImpalaExtro
-BehaviourImpalaExtro
-          lda SPRITE_STATE,x
-          cmp #4
-          bcs .NoMovingUp
-          
-.MoveUp2          
-          tay
-          inc SPRITE_MOVE_POS,x
-          lda SPRITE_MOVE_POS,x
-          cmp EXTRO_MOVE_TABLE_COUNT,y
-          beq .NextStatePos
-          
-          lda EXTRO_MOVE_TABLE_DELTA,y
-          sta PARAM5
-          
--          
-          jsr MoveSpriteUp
-          dec PARAM5
-          bne -
-          
-          
-          ;need to toggle prio?
-          lda SPRITE_STATE,x
-          cmp #6
-          bne +
-          lda SPRITE_MOVE_POS,x
-          cmp #5
-          bne +
-          
-          lda #0
-          sta VIC_SPRITE_PRIORITY
-          
-+          
-          rts
-          
-.NextStatePos
-          inc SPRITE_STATE,x
-          lda #0
-          sta SPRITE_MOVE_POS,x 
-          jmp BehaviourImpalaExtro
-          
-.NoMovingUp
-          beq .MoveDown1
-          cmp #4
-          bcc .MoveDown1
-          cmp #5 + 3
-          bcs .MoveDown1
-          jmp .MoveUp2
-          
-.MoveDown1
-          lda #3
-          sta VIC_SPRITE_PRIORITY
-          jsr MoveSpriteDown
-          
-          inc SPRITE_MOVE_POS,x
-          ldy SPRITE_STATE,x
-          lda SPRITE_MOVE_POS,x
-          cmp EXTRO_MOVE_TABLE_DELTA,y
-          beq +
-          rts
-          
-+
-          ;done going down
-          cpx #0
-          bne .RemoveMe
-          
-          lda SPRITE_STATE,x
-          cmp #8
-          beq .CarDone
-          
-          lda #SPRITE_IMPALA_BACK_SMALL
-          sta SPRITE_POINTER_BASE
-          lda #160 + 12
-          sta VIC_SPRITE_X_POS
-          jmp .NextStatePos
-          
-.CarDone
-          ;restore prio
-          lda #0
-          sta SPRITE_MOVE_POS,x
-.RemoveMe          
-          jmp RemoveObject
-
-
-EXTRO_MOVE_TABLE_DELTA
-          !byte 4,3,2,1,21,3,2,1,10
-          
-EXTRO_MOVE_TABLE_COUNT
-          !byte 5,20,15,10,0,5,12,20,0
 
 
 ;------------------------------------------------------------
@@ -13992,6 +13955,8 @@ LoadScores
 ;--------------------------------------------------
 !zone SaveScores
 SaveScores
+          lda #$0b
+          sta VIC_CONTROL_MODE
 
           ;delete old save file first
           lda #HIGHSCORE_DELETE_FILENAME_END - HIGHSCORE_DELETE_FILENAME
@@ -14055,6 +14020,9 @@ SaveScores
           
           ;if carry set, a save error has happened
           ;bcs .SaveError    
+          
+          lda #$1b
+          sta VIC_CONTROL_MODE
           rts
 
 
@@ -14239,7 +14207,6 @@ ENEMY_BEHAVIOUR_TABLE_LO
           !byte <BehaviourBoss6
           !byte <BehaviourBoss7
           !byte <BehaviourBossHelper
-          !byte <BehaviourImpalaExtro
           
 ENEMY_BEHAVIOUR_TABLE_HI
           !byte >PlayerControl
@@ -14277,7 +14244,6 @@ ENEMY_BEHAVIOUR_TABLE_HI
           !byte >BehaviourBoss6
           !byte >BehaviourBoss7
           !byte >BehaviourBossHelper
-          !byte >BehaviourImpalaExtro
           
 ;behaviour for an enemy being hit          
 ENEMY_HIT_BEHAVIOUR_TABLE_LO          
@@ -14315,7 +14281,7 @@ ENEMY_HIT_BEHAVIOUR_TABLE_LO
           !byte <HitBehaviourHurt     ;boss 6
           !byte <HitBehaviourBoss7    ;boss 7
           !byte <HitBehaviourBossHelper
-          !byte <BehaviourNone        ;impala 1
+          ;!byte <BehaviourNone        ;impala 1
           
           
 ENEMY_HIT_BEHAVIOUR_TABLE_HI
@@ -14353,7 +14319,7 @@ ENEMY_HIT_BEHAVIOUR_TABLE_HI
           !byte >HitBehaviourHurt     ;boss 6
           !byte >HitBehaviourHurt     ;boss 7
           !byte >HitBehaviourBossHelper
-          !byte >BehaviourNone        ;impala 1
+          ;!byte >BehaviourNone        ;impala 1
           
 ;0 = no enemy
 ;1 = normal enemy
@@ -14396,7 +14362,7 @@ IS_TYPE_ENEMY
           !byte 3     ;boss6
           !byte 3     ;boss7
           !byte 3     ;boss helper
-          !byte 0     ;impala 1
+          ;!byte 0     ;impala 1
           
 TYPE_START_SPRITE
           !byte 0     ;dummy entry for inactive object
@@ -14435,7 +14401,7 @@ TYPE_START_SPRITE
           !byte SPRITE_BOSS_TORSO_R
           !byte SPRITE_BOSS_HEAD
           !byte SPRITE_BOSS_HEAD
-          !byte SPRITE_IMPALA_BACK_1
+          ;!byte SPRITE_IMPALA_BACK_1
           
 TYPE_START_COLOR
           !byte 0
@@ -14474,7 +14440,7 @@ TYPE_START_COLOR
           !byte 1     ;boss6
           !byte 2     ;boss7
           !byte 2     ;boss helper
-          !byte 2     ;impala back
+          ;!byte 2     ;impala back
           
 TYPE_START_MULTICOLOR
           !byte 0     ;dummy
@@ -14513,7 +14479,7 @@ TYPE_START_MULTICOLOR
           !byte 0     ;boss6
           !byte 0     ;boss7
           !byte 0     ;boss helper
-          !byte 1     ;impala 1
+          ;!byte 1     ;impala 1
           
 TYPE_START_HP
           !byte 0     ;dummy
@@ -14552,7 +14518,7 @@ TYPE_START_HP
           !byte 10    ;boss6
           !byte 25    ;boss7
           !byte 5     ;boss helper
-          !byte 0     ;impala 1
+          ;!byte 0     ;impala 1
           
 TYPE_ANNOYED_COLOR
           !byte 0     ;dummy
@@ -14591,7 +14557,7 @@ TYPE_ANNOYED_COLOR
           !byte 1     ;boss6
           !byte 2     ;boss7
           !byte 2     ;boss helper
-          !byte 0     ;impala 1
+          ;!byte 0     ;impala 1
           
           
 ;enemy start direction, 2 bits per dir.
@@ -14646,7 +14612,7 @@ TYPE_START_DIRECTION
           !byte %00001010     ;boss6
           !byte %00001010     ;boss7
           !byte %00001010     ;boss helper
-          !byte 0             ;impala 1
+          ;!byte 0             ;impala 1
           
 TYPE_START_STATE
           !byte 0             ;dummy
@@ -14685,7 +14651,7 @@ TYPE_START_STATE
           !byte 128           ;boss6
           !byte 128           ;boss7
           !byte 0             ;boss helper
-          !byte 0             ;impala 1
+          ;!byte 0             ;impala 1
           
 TYPE_START_DELTA_Y
           !byte 0     ;dummy
@@ -14724,7 +14690,7 @@ TYPE_START_DELTA_Y
           !byte 0     ;boss6
           !byte 0     ;boss7
           !byte 0             ;boss helper
-          !byte 0     ;impala 1
+          ;!byte 0     ;impala 1
           
 BAT_ANIMATION
           !byte SPRITE_BAT_1
@@ -15082,11 +15048,12 @@ TEXT_EXTRO
           !text "THAT WAS A CLOSE CALL,-"
           !text "WE STILL KICKED ITS ASS THOUGH.-"
           !text "-"
-          !text "WELL DONE, THANK YOU FOR PLAYING!-"
-          !text "-"
-          !text "-"
           !text "I NEED A REAL BIG BURGER NOW...--"
-          !text "YUP, ME TOO.*"
+          !text "YUP, ME TOO.-"
+          !text "-"
+          !text "-"
+          !text "-"
+          !text "WELL DONE, THANK YOU FOR PLAYING!*"
           
 
 COLOR_FADE_POS
@@ -15217,6 +15184,8 @@ MOVE_STONE_POS_BACK
 MOVE_STONE_POS_FRONT
           !byte 0
 CURRENT_INDEX
+          !byte 0
+CURRENT_SUB_INDEX
           !byte 0
   
 MOVE_BORDER_LEFT
