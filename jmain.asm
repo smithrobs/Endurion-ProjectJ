@@ -28,7 +28,7 @@ JOYSTICK_PORT_II        = $dc00
 
 CIA_PRA                 = $dd00
 
-START_LEVEL             = 22
+START_LEVEL             = 0
 
 
 ;placeholder for various temp parameters
@@ -38,6 +38,7 @@ PARAM3                  = $05
 PARAM4                  = $06
 PARAM5                  = $07
 PARAM6                  = $08
+PARAM7                  = $09
 
 ;placeholder for zero page pointers
 ZEROPAGE_POINTER_1      = $17
@@ -249,6 +250,10 @@ LD_LINE_H_ALT           = 5     ;data contains x,y,width,char,color
 LD_LINE_V_ALT           = 6     ;data contains x,y,height,char,color
 LD_QUAD                 = 7     ;data contains x,y,quad_id
 LD_SPAWN_SPOT           = 8     ;data contains x,y,type,count
+LD_ELEMENT              = 9     ;single element block
+LD_ELEMENT_LINE_H       = 10    ;element block line H
+LD_ELEMENT_LINE_V       = 11    ;element block line V
+LD_ELEMENT_AREA         = 12    ;element block area
 
 ;object type constants
 TYPE_INVALID            = 0
@@ -3940,7 +3945,7 @@ BehaviourDevil
           sta SPRITE_POINTER_BASE,x
           rts
  
- 
+  
 ;------------------------------------------------------------
 ;simply walk left/right, don't fall off
 ;------------------------------------------------------------
@@ -6581,7 +6586,7 @@ BuildScreen
           bne .ClearObjectLoop
           
           ;clear screen
-          lda #0
+          lda #32
           ldy #6
           jsr ClearPlayScreen
 
@@ -6645,6 +6650,10 @@ LEVEL_ELEMENT_TABLE_LO
           !byte <LevelLineVAlternating
           !byte <LevelQuad
           !byte <LevelSpawnSpot
+          !byte <LevelElement
+          !byte <LevelElementH
+          !byte <LevelElementV
+          !byte <LevelElementArea
           
 LEVEL_ELEMENT_TABLE_HI
           !byte >.LevelComplete
@@ -6656,6 +6665,10 @@ LEVEL_ELEMENT_TABLE_HI
           !byte >LevelLineVAlternating
           !byte >LevelQuad
           !byte >LevelSpawnSpot
+          !byte >LevelElement
+          !byte >LevelElementH
+          !byte >LevelElementV
+          !byte >LevelElementArea
 
 .LevelComplete          
           rts
@@ -7327,6 +7340,230 @@ LevelSpawnSpot
 
           jmp NextLevelData
 
+
+;------------------------------------------------------------
+;draws a level element
+;PARAM1 = X
+;PARAM2 = Y
+;PARAM3 = TYPE
+;returns element width in PARAM4
+;returns element height in PARAM5
+;------------------------------------------------------------
+
+!zone DrawLevelElement          
+DrawLevelElement          
+
+          ldy PARAM3
+
+          lda SNELEMENT_TABLE_LO,y
+          sta .LoadCode + 1
+          lda SNELEMENT_TABLE_HI,y
+          sta .LoadCode + 2
+
+          lda SNELEMENT_COLOR_TABLE_LO,y
+          sta .LoadCodeColor + 1
+          lda SNELEMENT_COLOR_TABLE_HI,y
+          sta .LoadCodeColor + 2
+
+          lda SNELEMENT_WIDTH_TABLE,y
+          sta PARAM4
+          lda SNELEMENT_HEIGHT_TABLE,y
+          sta PARAM5
+          sta PARAM6
+          
+          ldy PARAM2
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          clc
+          adc PARAM1
+          sta .StoreCode + 1
+          sta .StoreCodeColor + 1
+          sta ZEROPAGE_POINTER_4
+          lda SCREEN_LINE_OFFSET_TABLE_HI,y
+          adc #0
+          sta .StoreCode + 2
+          adc #( ( >SCREEN_COLOR ) - ( >SCREEN_CHAR ) )
+          sta .StoreCodeColor + 2
+          
+.NextRow          
+          ldx #0
+          
+          ;display a row
+.Row
+          
+.LoadCode
+          lda $8000,x
+.StoreCode
+          sta $8000,x
+          
+.LoadCodeColor
+          lda $8000,x
+.StoreCodeColor
+          sta $8000,x
+          
+          inx
+          cpx PARAM4
+          bne .Row
+          
+          ;eine zeile nach unten
+          dec PARAM6
+          beq .ElementDone
+
+          ;should be faster?
+          lda .LoadCode + 1
+          clc
+          adc PARAM4
+          sta .LoadCode + 1
+          lda .LoadCode + 2
+          adc #0
+          sta .LoadCode + 2
+          
+          lda .LoadCodeColor + 1
+          clc
+          adc PARAM4
+          sta .LoadCodeColor + 1
+          lda .LoadCodeColor + 2
+          adc #0
+          sta .LoadCodeColor + 2
+
+          lda .StoreCode + 1
+          clc
+          adc #40
+          sta .StoreCode + 1
+          lda .StoreCode + 2
+          adc #0
+          sta .StoreCode + 2
+
+          lda .StoreCodeColor + 1
+          clc
+          adc #40
+          sta .StoreCodeColor + 1
+          lda .StoreCodeColor + 2
+          adc #0
+          sta .StoreCodeColor + 2
+
+          jmp .NextRow
+          
+.ElementDone          
+          rts
+
+
+!zone LevelElement
+LevelElement
+LevelElementArea
+
+
+          ; !byte LD_ELEMENT,0,0,EL_BLUE_BRICK_4x3
+          ;X pos
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta PARAM1 
+          
+          ;Y pos
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta PARAM2
+
+          ;type
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta PARAM3
+
+          ;store y for later
+          tya
+          pha
+          
+          jsr DrawLevelElement
+          
+          jmp NextLevelData
+
+
+
+!zone LevelElementH
+LevelElementH
+
+          ; !byte LD_ELEMENT_LINE_H,x,y,width,element
+          ;X pos
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta PARAM1 
+          
+          ;Y pos
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta PARAM2
+
+          ;x count
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta PARAM7
+
+          ;type
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta PARAM3
+
+          ;store y for later
+          tya
+          pha
+          
+.NextElement          
+          jsr DrawLevelElement
+          
+          dec PARAM7
+          beq .Done
+          
+          lda PARAM1
+          clc
+          adc PARAM4
+          sta PARAM1
+          jmp .NextElement
+          
+.Done          
+          jmp NextLevelData
+
+          
+!zone LevelElementV
+LevelElementV
+
+          ; !byte LD_ELEMENT_LINE_V,x,y,num,element
+          ;X pos
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta PARAM1 
+          
+          ;Y pos
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta PARAM2
+
+          ;y count
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta PARAM7
+
+          ;type
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta PARAM3
+
+          ;store y for later
+          tya
+          pha
+          
+.NextElement          
+          jsr DrawLevelElement
+          
+          dec PARAM7
+          beq .Done
+          
+          lda PARAM2
+          clc
+          adc PARAM5
+          sta PARAM2
+          jmp .NextElement
+          
+.Done          
+          jmp NextLevelData
 
 
 ;------------------------------------------------------------
@@ -8647,6 +8884,7 @@ GAME_MODE
 ;screen data
 ;------------------------------------------------------------
 SCREEN_DATA_TABLE
+          !word SN_LEVEL_1
           !word LEVEL_1
           !word LEVEL_2
           !word LEVEL_3
@@ -9174,6 +9412,8 @@ LEVEL_BORDER_DATA
           !byte LD_LINE_V_ALT,0,1,22,192,9
           !byte LD_LINE_V_ALT,39,1,22,192,9
           !byte LD_END
+          
+!source "level_data.asm"          
 
 CHARSET
           !binary "j.chr"
