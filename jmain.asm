@@ -48,7 +48,7 @@ CIA_PRA                 = $dd00
 
 PROCESSOR_PORT          = $01
 
-START_LEVEL             = 33
+START_LEVEL             = 42
 
 MUSIC_IN_GAME_TUNE		    = $00
 MUSIC_TITLE_TUNE			     = $01
@@ -74,7 +74,6 @@ ZEROPAGE_POINTER_2      = $19
 ZEROPAGE_POINTER_3      = $21
 ZEROPAGE_POINTER_4      = $23
 
-;address of the screen buffer
 ;address of the screen buffer
 SCREEN_CHAR             = $CC00
 
