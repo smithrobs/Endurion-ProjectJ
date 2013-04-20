@@ -26,6 +26,7 @@ KERNAL_LOAD             = $ffd5
 VIC_SPRITE_X_POS        = $d000
 VIC_SPRITE_Y_POS        = $d001
 VIC_SPRITE_X_EXTEND     = $d010
+VIC_CONTROL_MODE        = $d011
 VIC_SPRITE_ENABLE       = $d015
 VIC_CONTROL             = $d016
 VIC_SPRITE_EXPAND_Y     = $d017
@@ -763,6 +764,9 @@ TitleScreenWithoutIRQ
           sta PLAYER_FORCE_RANGE
           
           ;setup level
+          lda #$0b
+          sta VIC_CONTROL_MODE
+          
           jsr StartLevel
           
           lda #START_LEVEL
@@ -855,6 +859,9 @@ TitleScreenWithoutIRQ
           jsr MUSIC_PLAYER
           
 }          
+          lda #$1b
+          sta VIC_CONTROL_MODE
+
           jmp GameLoop
           
 ;------------------------------------------------------------
@@ -980,6 +987,9 @@ GameLoop
           bne .NOCHEAT
           
           ;jump to next level
+          lda #$0b
+          sta VIC_CONTROL_MODE
+          
           jsr StartLevel
           
           inc LEVEL_NR
@@ -987,6 +997,9 @@ GameLoop
           
           jsr CopyLevelToBackBuffer
           jsr DisplayGetReady
+          lda #$1b
+          sta VIC_CONTROL_MODE
+          
 .NOCHEAT
 
           ;animate water tile
@@ -1053,12 +1066,7 @@ GameLoop
           lda SPRITE_POS_X_EXTEND
           sta VIC_SPRITE_X_EXTEND
 
-          lda SPRITE_POS_X
-          sta VIC_SPRITE_X_POS
-          lda SPRITE_POS_X + 1
-          sta VIC_SPRITE_X_POS + 2
-          lda SPRITE_POS_Y
-          sta VIC_SPRITE_Y_POS
+
           lda SPRITE_POS_Y + 1
           sta VIC_SPRITE_Y_POS + 2
 
@@ -1068,15 +1076,25 @@ GameLoop
           stx VIC_SPRITE_EXPAND_X
           stx VIC_SPRITE_EXPAND_Y
 -          
+          txa
+          asl
+          tay
+
+          lda SPRITE_POS_X,x
+          sta VIC_SPRITE_X_POS,y
+          lda SPRITE_POS_Y,x
+          sta VIC_SPRITE_Y_POS,y
+
+          lda SPRITE_COLOR,x
+          sta VIC_SPRITE_COLOR,x
+
           ldy SPRITE_ACTIVE,x
           cpy #0
           bne +
           
 --          
-          lda SPRITE_COLOR,x
-          sta VIC_SPRITE_COLOR,x
           inx
-          cpx #2
+          cpx #8
           bne -
           jmp GameLoop
           
@@ -1395,6 +1413,9 @@ GameFlowControl
 
 
 .GoToNextLevel
+          lda #$0b
+          sta VIC_CONTROL_MODE
+
           jsr StartLevel
           
           inc LEVEL_NR
@@ -1402,6 +1423,9 @@ GameFlowControl
           
           jsr CopyLevelToBackBuffer
           jsr DisplayGetReady
+          
+          lda #$1b
+          sta VIC_CONTROL_MODE
           rts
 
 
