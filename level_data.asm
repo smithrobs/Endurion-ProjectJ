@@ -2269,7 +2269,7 @@ SN_LEVEL_66
           !byte LD_OBJECT,20,9,TYPE_BOSS6
           !byte LD_END
 SN_LEVEL_67
-          !byte LD_LEVEL_CONFIG,3
+          !byte LD_LEVEL_CONFIG,7
           !byte LD_AREA,8,2,24,19,93,6
           !byte LD_ELEMENT_LINE_H,6,21,7,EL_SN_BLUEROCK
           !byte LD_ELEMENT_LINE_V,16,11,2,EL_SN_METAL.DOOR.L

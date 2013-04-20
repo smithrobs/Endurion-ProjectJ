@@ -1454,7 +1454,7 @@ GameFlowControl
           inc LEVEL_DONE_DELAY
           lda LEVEL_DONE_DELAY
           cmp #20
-          beq .GoToNextLevel
+          beq GoToNextLevel
           
 .NotDoneYet        
 
@@ -1470,7 +1470,15 @@ GameFlowControl
           rts
 
 
-.GoToNextLevel
+GoToNextLevel
+          lda LEVEL_CONFIG
+          and #$04
+          beq .NoDoorAnim
+          
+          jsr DoorAnim
+
+
+.NoDoorAnim
           lda LEVEL_NR
           cmp #10
           beq .ShowStory
@@ -1522,6 +1530,91 @@ GameFlowControl
           
           lda #$1b
           sta VIC_CONTROL_MODE
+          rts
+
+
+;------------------------------------------------------------
+;open door animation
+;------------------------------------------------------------
+!zone DoorAnim
+DoorAnim
+          lda #0
+          sta LEVEL_DONE_DELAY
+
+
+.DoorAnimLoop
+          jsr WaitFrame
+          
+          inc LEVEL_DONE_DELAY
+          lda LEVEL_DONE_DELAY
+          and #$07
+          bne .DoorAnimLoop
+          
+          ;open door (16,11)
+          lda #11
+          sta PARAM2
+          
+-          
+          ldy PARAM2
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          lda SCREEN_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+          
+          ldy #17
+          lda (ZEROPAGE_POINTER_1),y
+          dey
+          sta (ZEROPAGE_POINTER_1),y
+          ldy #18
+          lda (ZEROPAGE_POINTER_1),y
+          dey
+          sta (ZEROPAGE_POINTER_1),y
+          ldy #19
+          lda (ZEROPAGE_POINTER_1),y
+          dey
+          sta (ZEROPAGE_POINTER_1),y
+          lda #32
+          ldy #19
+          sta (ZEROPAGE_POINTER_1),y
+          
+          ldy #22
+          lda (ZEROPAGE_POINTER_1),y
+          iny
+          sta (ZEROPAGE_POINTER_1),y
+          ldy #21
+          lda (ZEROPAGE_POINTER_1),y
+          iny
+          sta (ZEROPAGE_POINTER_1),y
+          ldy #20
+          lda (ZEROPAGE_POINTER_1),y
+          iny
+          sta (ZEROPAGE_POINTER_1),y
+          
+          lda #32
+          ldy #20
+          sta (ZEROPAGE_POINTER_1),y
+          
+          inc PARAM2
+          lda PARAM2
+          cmp #21
+          bne -
+
+          ;
+          lda LEVEL_DONE_DELAY
+          lsr
+          lsr
+          lsr
+          cmp #4
+          bne .DoorAnimLoop
+
+          ;door is fully open now
+-
+          jsr WaitFrame
+          
+          inc LEVEL_DONE_DELAY
+          lda LEVEL_DONE_DELAY
+          cmp #200
+          bne -
           rts
 
 
@@ -1599,7 +1692,7 @@ ProcessSpawnSpots
 .TryToSpawn
           stx PARAM4
           
-          lda NUMBER_ENEMIES_ALIVE
+          lda NUMBER_ENEMIES_ALIVE 
           clc
           adc NUMBER_SPAWNS_ALIVE
           cmp #6
@@ -4799,154 +4892,6 @@ BehaviourMummy
           rts
  
  
-;------------------------------------------------------------
-;simply walk left/right, don't fall off
-;------------------------------------------------------------
-!zone BehaviourDevil
-BehaviourDevil
-          jsr HandleHitBack
-          beq .NoHitBack
-          rts
-.NoHitBack          
-          jsr ObjectMoveDownBlocking
-          beq .NotFalling
-          rts
-          
-.NotFalling          
-          inc SPRITE_ANIM_DELAY,x
-          lda SPRITE_ANIM_DELAY,x
-          cmp #8
-          bne .NoAnimUpdate
-          
-          lda #0
-          sta SPRITE_ANIM_DELAY,x
-          
-          inc SPRITE_ANIM_POS,x
-          lda SPRITE_ANIM_POS,x
-          cmp #3
-          bne .NoWrap
-          lda #0
-.NoWrap          
-          sta SPRITE_ANIM_POS,x
-          
-          clc
-          asl
-          adc SPRITE_DIRECTION,x
-          adc #SPRITE_DEVIL_WALK_R_1
-          sta SPRITE_POINTER_BASE,x
-
-.NoAnimUpdate
-          lda SPRITE_CHAR_POS_Y,x
-          cmp SPRITE_CHAR_POS_Y
-          bne .NoPlayerInSight
-          
-          ;player on same height
-          ;looking at the player?
-          jsr LookingAtPlayer
-          beq .NoPlayerInSight
-
-          lda SPRITE_DIRECTION,x
-          beq .AttackRight
-          
-          ;attack to left
-          jsr ObjectMoveLeftBlocking
-          jsr ObjectMoveLeftBlocking
-          beq .ToggleDirection
-          rts
-          
-.AttackRight
-          ;attack to left
-          jsr ObjectMoveRightBlocking
-          jsr ObjectMoveRightBlocking
-          beq .ToggleDirection
-          rts
-
-.NoPlayerInSight
-          lda DELAYED_GENERIC_COUNTER
-          and #$03
-          beq .MovementUpdate
-          rts
-          
-.MovementUpdate
-          inc SPRITE_MOVE_POS,x
-          lda SPRITE_MOVE_POS,x
-          and #$03
-          sta SPRITE_MOVE_POS,x
-          
-          lda SPRITE_DIRECTION,x
-          beq .MoveRight
-          
-          ;move left
-          jsr ObjectWalkLeft
-          beq .ToggleDirection
-          rts
-          
-.MoveRight
-          jsr ObjectWalkRight
-          beq .ToggleDirection
-          rts
-          
-.ToggleDirection
-          lda SPRITE_DIRECTION,x
-          eor #1
-          sta SPRITE_DIRECTION,x
-          clc
-          adc #SPRITE_DEVIL_WALK_R_1
-          sta SPRITE_POINTER_BASE,x
-          rts
- 
-;------------------------------------------------------------
-;drive left/pause/drive off left
-;------------------------------------------------------------
-!zone BehaviourImpala
-BehaviourImpalaDebris
-          inc SPRITE_ANIM_DELAY,x
-          lda SPRITE_ANIM_DELAY,x
-          and #$04
-          lsr
-          lsr
-          clc
-          adc #SPRITE_DEBRIS_1
-          sta SPRITE_POINTER_BASE,x
-
-BehaviourImpala
-
-          lda SPRITE_STATE,x
-          beq .DriveFirstHalf
-          cmp #1
-          beq .HandlePause
-          
-          ;drive off
-          jsr MoveSpriteLeft
-          lda SPRITE_POS_X,x
-          beq .DriveDone
-          rts
-          
-.DriveDone
-          jsr RemoveObject
-          rts
-          
-.DriveFirstHalf
-          jsr MoveSpriteLeft
-          inc SPRITE_MOVE_POS,x
-          lda SPRITE_MOVE_POS,x
-          cmp #200
-          beq .NextState
-          rts
-          
-.NextState       
-          inc SPRITE_STATE,x
-          lda #0
-          sta SPRITE_MOVE_POS,x
-          rts
-          
-.HandlePause  
-          inc SPRITE_MOVE_POS,x
-          beq .NextState
-          rts
-
-
-          
  
           
  
@@ -5034,6 +4979,60 @@ BehaviourImpala
         !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
         !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 
+ 
+
+;------------------------------------------------------------
+;drive left/pause/drive off left
+;------------------------------------------------------------
+!zone BehaviourImpala
+BehaviourImpalaDebris
+          inc SPRITE_ANIM_DELAY,x
+          lda SPRITE_ANIM_DELAY,x
+          and #$04
+          lsr
+          lsr
+          clc
+          adc #SPRITE_DEBRIS_1
+          sta SPRITE_POINTER_BASE,x
+
+BehaviourImpala
+
+          lda SPRITE_STATE,x
+          beq .DriveFirstHalf
+          cmp #1
+          beq .HandlePause
+          
+          ;drive off
+          jsr MoveSpriteLeft
+          lda SPRITE_POS_X,x
+          beq .DriveDone
+          rts
+          
+.DriveDone
+          jsr RemoveObject
+          rts
+          
+.DriveFirstHalf
+          jsr MoveSpriteLeft
+          inc SPRITE_MOVE_POS,x
+          lda SPRITE_MOVE_POS,x
+          cmp #200
+          beq .NextState
+          rts
+          
+.NextState       
+          inc SPRITE_STATE,x
+          lda #0
+          sta SPRITE_MOVE_POS,x
+          rts
+          
+.HandlePause  
+          inc SPRITE_MOVE_POS,x
+          beq .NextState
+          rts
+
+
+          
 
         ;here is some free memory in between!
 TITLE_LOGO_COLORRAM
@@ -5145,6 +5144,102 @@ SCREEN_BACK_LINE_OFFSET_TABLE_HI
 * = $3000
 MUSIC_PLAYER
 !binary "music.bin",,2
+
+;------------------------------------------------------------
+;simply walk left/right, don't fall off
+;------------------------------------------------------------
+!zone BehaviourDevil
+BehaviourDevil
+          jsr HandleHitBack
+          beq .NoHitBack
+          rts
+.NoHitBack          
+          jsr ObjectMoveDownBlocking
+          beq .NotFalling
+          rts
+          
+.NotFalling          
+          inc SPRITE_ANIM_DELAY,x
+          lda SPRITE_ANIM_DELAY,x
+          cmp #8
+          bne .NoAnimUpdate
+          
+          lda #0
+          sta SPRITE_ANIM_DELAY,x
+          
+          inc SPRITE_ANIM_POS,x
+          lda SPRITE_ANIM_POS,x
+          cmp #3
+          bne .NoWrap
+          lda #0
+.NoWrap          
+          sta SPRITE_ANIM_POS,x
+          
+          clc
+          asl
+          adc SPRITE_DIRECTION,x
+          adc #SPRITE_DEVIL_WALK_R_1
+          sta SPRITE_POINTER_BASE,x
+
+.NoAnimUpdate
+          lda SPRITE_CHAR_POS_Y,x
+          cmp SPRITE_CHAR_POS_Y
+          bne .NoPlayerInSight
+          
+          ;player on same height
+          ;looking at the player?
+          jsr LookingAtPlayer
+          beq .NoPlayerInSight
+
+          lda SPRITE_DIRECTION,x
+          beq .AttackRight
+          
+          ;attack to left
+          jsr ObjectMoveLeftBlocking
+          jsr ObjectMoveLeftBlocking
+          beq .ToggleDirection
+          rts
+          
+.AttackRight
+          ;attack to left
+          jsr ObjectMoveRightBlocking
+          jsr ObjectMoveRightBlocking
+          beq .ToggleDirection
+          rts
+
+.NoPlayerInSight
+          lda DELAYED_GENERIC_COUNTER
+          and #$03
+          beq .MovementUpdate
+          rts
+          
+.MovementUpdate
+          inc SPRITE_MOVE_POS,x
+          lda SPRITE_MOVE_POS,x
+          and #$03
+          sta SPRITE_MOVE_POS,x
+          
+          lda SPRITE_DIRECTION,x
+          beq .MoveRight
+          
+          ;move left
+          jsr ObjectWalkLeft
+          beq .ToggleDirection
+          rts
+          
+.MoveRight
+          jsr ObjectWalkRight
+          beq .ToggleDirection
+          rts
+          
+.ToggleDirection
+          lda SPRITE_DIRECTION,x
+          eor #1
+          sta SPRITE_DIRECTION,x
+          clc
+          adc #SPRITE_DEVIL_WALK_R_1
+          sta SPRITE_POINTER_BASE,x
+          rts
 
 
 ;------------------------------------------------------------
