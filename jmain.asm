@@ -2,18 +2,6 @@
 !to "jmain.prg",cbm
 
 ;define constants here
-VIC_SPRITE_X_POS        = $d000
-VIC_SPRITE_Y_POS        = $d001
-VIC_SPRITE_X_EXTEND     = $d010
-VIC_SPRITE_ENABLE       = $d015
-VIC_CONTROL             = $d016
-VIC_MEMORY_CONTROL      = $d018
-
-VIC_BACKGROUND_COLOR    = $d021
-VIC_CHARSET_MULTICOLOR_1= $d022
-VIC_CHARSET_MULTICOLOR_2= $d023
-
-CIA_PRA                 = $dd00
 
 ;placeholder for various temp parameters
 PARAM1                  = $03
@@ -27,6 +15,24 @@ ZEROPAGE_POINTER_1      = $17
 ZEROPAGE_POINTER_2      = $19
 ZEROPAGE_POINTER_3      = $21
 ZEROPAGE_POINTER_4      = $23
+
+VIC_SPRITE_X_POS        = $d000
+VIC_SPRITE_Y_POS        = $d001
+VIC_SPRITE_X_EXTEND     = $d010
+VIC_SPRITE_ENABLE       = $d015
+VIC_CONTROL             = $d016
+VIC_MEMORY_CONTROL      = $d018
+VIC_SPRITE_MULTICOLOR   = $d01c
+VIC_SPRITE_MULTICOLOR_1 = $d025
+VIC_SPRITE_MULTICOLOR_2 = $d026
+VIC_SPRITE_COLOR        = $d027
+
+VIC_BORDER_COLOR        = $d020
+VIC_BACKGROUND_COLOR    = $d021
+VIC_CHARSET_MULTICOLOR_1= $d022
+VIC_CHARSET_MULTICOLOR_2= $d023
+
+CIA_PRA                 = $dd00
 
 ;address of the screen buffer
 SCREEN_CHAR             = $CC00
@@ -48,6 +54,12 @@ SPRITE_PLAYER           = SPRITE_BASE + 0
 ;offset from calculated char pos to true sprite pos
 SPRITE_CENTER_OFFSET_X  = 8
 SPRITE_CENTER_OFFSET_Y  = 11
+
+;entries of jump table
+JUMP_TABLE_SIZE         = 10
+
+;entries of fall table
+FALL_TABLE_SIZE         = 10
 
 
 ;level data constants
@@ -179,18 +191,56 @@ GameLoop
 ;------------------------------------------------------------
 !zone PlayerControl
 PlayerControl
-          lda #$02
-          bit $dc00
-          bne .NotDownPressed
+
+          lda PLAYER_JUMP_POS
+          bne .PlayerIsJumping
+
           jsr PlayerMoveDown
+          beq .NotFalling
+          
+          ;player fell one pixel
+          jmp .PlayerFell
+          
+          ;lda #$02
+          ;bit $dc00
+          ;bne .NotDownPressed
+          ;jsr PlayerMoveDown
+          
+.NotFalling          
+          lda #0
+          sta PLAYER_FALL_POS
           
 .NotDownPressed          
           lda #$01
           bit $dc00
           bne .NotUpPressed
-          jsr PlayerMoveUp
           
+          jmp .PlayerIsJumping
+          
+.PlayerFell
+          ldx PLAYER_FALL_POS
+          lda FALL_SPEED_TABLE,x
+          beq .FallComplete
+          sta PARAM5
+
+.FallLoop          
+          dec PARAM5
+          beq .FallComplete
+          
+          jsr PlayerMoveDown
+          jmp .FallLoop
+          
+.FallComplete
+          lda PLAYER_FALL_POS
+          cmp #( FALL_TABLE_SIZE - 1 )
+          beq .FallSpeedAtMax
+          
+          inc PLAYER_FALL_POS
+
+.FallSpeedAtMax
 .NotUpPressed          
+.JumpStopped
+.JumpComplete
           lda #$04
           bit $dc00
           bne .NotLeftPressed
@@ -204,6 +254,37 @@ PlayerControl
 
 .NotRightPressed
           rts
+
+.PlayerIsJumping
+          inc PLAYER_JUMP_POS
+          lda PLAYER_JUMP_POS
+          cmp #JUMP_TABLE_SIZE
+          bne .JumpOn
+          
+          lda #0
+          sta PLAYER_JUMP_POS
+          jmp .JumpComplete
+          
+.JumpOn                    
+          ldx PLAYER_JUMP_POS
+          
+          lda PLAYER_JUMP_TABLE,x
+          beq .JumpComplete
+          sta PARAM5
+          
+.JumpContinue          
+          jsr PlayerMoveUp
+          beq .JumpBlocked
+          
+          dec PARAM5
+          bne .JumpContinue
+          jmp .JumpComplete
+          
+          
+.JumpBlocked
+          lda #0
+          sta PLAYER_JUMP_POS
+          jmp .JumpStopped
 
 ;------------------------------------------------------------
 ;PlayerMoveLeft
@@ -219,6 +300,7 @@ PlayerMoveLeft
           dec SPRITE_CHAR_POS_X_DELTA
           
           jsr MoveSpriteLeft
+          lda #1
           rts
           
 .CheckCanMoveLeft
@@ -272,6 +354,7 @@ PlayerMoveLeft
           jmp .CanMoveLeft
           
 .BlockedLeft
+          lda #0
           rts
 
           
@@ -298,6 +381,7 @@ PlayerMoveRight
           
 .NoCharStep          
           jsr MoveSpriteRight
+          lda #1
           rts
           
 .CheckCanMoveRight
@@ -345,7 +429,8 @@ PlayerMoveRight
           
           jmp .CanMoveRight
           
-.BlockedRight
+.BlockedRight 
+          lda #0
           rts
           
 
@@ -372,6 +457,7 @@ PlayerMoveUp
           
 .NoCharStep          
           jsr MoveSpriteUp
+          lda #1
           rts
           
 .CheckCanMoveUp
@@ -414,6 +500,7 @@ PlayerMoveUp
           jmp .CanMoveUp
           
 .BlockedUp
+          lda #0
           rts
           
           
@@ -440,6 +527,7 @@ PlayerMoveDown
           
 .NoCharStep          
           jsr MoveSpriteDown
+          lda #1
           rts
           
 .CheckCanMoveDown
@@ -457,7 +545,7 @@ PlayerMoveDown
           iny
           lda (ZEROPAGE_POINTER_1),y
           
-          jsr IsCharBlocking
+          jsr IsCharBlockingFall
           bne .BlockedDown
           
 .NoSecondCharCheckNeeded          
@@ -473,12 +561,13 @@ PlayerMoveDown
           
           lda (ZEROPAGE_POINTER_1),y
           
-          jsr IsCharBlocking
+          jsr IsCharBlockingFall
           bne .BlockedDown
           
           jmp .CanMoveDown
           
 .BlockedDown
+          lda #0
           rts
           
 
@@ -573,6 +662,26 @@ MoveSpriteDown
 !zone IsCharBlocking
 IsCharBlocking
           cmp #128
+          bpl .Blocking
+          
+          lda #0
+          rts
+          
+.Blocking
+          lda #1
+          rts
+
+
+;------------------------------------------------------------
+;IsCharBlockingFall
+;checks if a char is blocking a fall (downwards)
+;PARAM1 = char_pos_x
+;PARAM2 = char_pos_y
+;returns 1 for blocking, 0 for not blocking
+;------------------------------------------------------------
+!zone IsCharBlockingFall
+IsCharBlockingFall
+          cmp #96
           bpl .Blocking
           
           lda #0
@@ -956,9 +1065,10 @@ SCREEN_DATA_TABLE
           
           
 LEVEL_1
-          !byte LD_LINE_H,5,5,10,128,9
-          !byte LD_LINE_H,30,12,9,129,9
-          !byte LD_LINE_H,10,19,20,128,9
+          !byte LD_LINE_H,5,5,10,96,13
+          !byte LD_LINE_H,12,7,8,96,13
+          !byte LD_LINE_H,30,12,9,97,13
+          !byte LD_LINE_H,10,19,20,96,13
           !byte LD_LINE_V,7,6,4,128,9
           !byte LD_END
 
@@ -976,6 +1086,18 @@ LEVEL_BORDER_DATA
 
 LEVEL_NR  
           !byte 0
+          
+PLAYER_JUMP_POS
+          !byte 0
+PLAYER_JUMP_TABLE
+          !byte 8,7,5,3,2,1,1,1,0,0
+          
+PLAYER_FALL_POS
+          !byte 0
+FALL_SPEED_TABLE
+          !byte 1,1,2,2,3,3,3,3,3,3
+          
+          
 SPRITE_POS_X
           !byte 0,0,0,0,0,0,0,0
 SPRITE_POS_X_EXTEND
