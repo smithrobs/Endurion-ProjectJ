@@ -1418,6 +1418,8 @@ SN_LEVEL_33
           !byte LD_OBJECT,3,18,TYPE_PLAYER_DEAN
           !byte LD_OBJECT,36,18,TYPE_PLAYER_SAM
           !byte LD_OBJECT,19,11,TYPE_BOSS3
+          !byte LD_ELEMENT_LINE_H,11,14,2,EL_SN_WOODEN_FLOOR
+          !byte LD_ELEMENT_LINE_H,23,14,2,EL_SN_WOODEN_FLOOR
           !byte LD_END
 SN_LEVEL_34
           !byte LD_LEVEL_CONFIG,2

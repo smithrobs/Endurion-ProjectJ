@@ -48,8 +48,8 @@ CIA_PRA                 = $dd00
 
 PROCESSOR_PORT          = $01
 
-;START_LEVEL             = 0
-START_LEVEL             = 71
+START_LEVEL             = 0
+;START_LEVEL             = 71
 
 MUSIC_IN_GAME_TUNE		    = $00
 MUSIC_TITLE_TUNE			     = $01
@@ -2849,6 +2849,10 @@ PlayerControl
           lda JOYSTICK_PORT_II,y
           and #$10
           beq +
+          
+          ;not fire pressed
+          lda #1
+          sta PLAYER_FIRE_RELEASED,x
           jmp .SamNotFirePushed
           
 +          
@@ -2857,9 +2861,21 @@ PlayerControl
           
           stx PARAM6
           
+          lda SPRITE_HELD
+          bne .NoFireReleasedCheck
+          
           jsr SamUseForce
           beq .NoEnemyHeld
           
+          ldx CURRENT_INDEX
+          lda PLAYER_FIRE_RELEASED,x
+          bne +
+          jmp .SamNotFirePushed
++          
+          lda #0
+          sta PLAYER_FIRE_RELEASED,x
+
+.NoFireReleasedCheck
           ;release beam when moving
           lda SAM_FORCE_START_Y
           clc
@@ -2868,7 +2884,7 @@ PlayerControl
           beq +
           jmp .SamNotFirePushed
           
-+          
++         
           ;Sam needs to keep pressed
           jsr RedrawForceBeam
           
@@ -2931,6 +2947,20 @@ PlayerControl
           beq .EnemyKilled
           
           ;enemy was hurt
+          ldy SPRITE_HELD
+          dey
+          lda SPRITE_ACTIVE,y
+          tay
+          lda IS_TYPE_ENEMY,y
+          cmp #3
+          ;if boss, auto-release
+          bne +
+          
+          lda #0
+          sta PLAYER_FIRE_RELEASED,x
+          jmp .SamNotFirePushed
+          
++          
           lda BOSS_HELD
           beq .EnemyWasHurt
           
@@ -13508,6 +13538,8 @@ PLAYER_SHOT_PAUSE
           !byte 0,0
 PLAYER_FIRE_PRESSED_TIME
           !byte 0,0
+PLAYER_FIRE_RELEASED
+          !byte 0,0
 PLAYER_LIVES
           !byte 0,0
 PLAYER_SHELLS
@@ -13767,6 +13799,10 @@ ENEMY_HIT_BEHAVIOUR_TABLE_HI
           !byte >HitBehaviourHurt     ;boss 7
           !byte >HitBehaviourBossHelper
           
+;0 = no enemy
+;1 = normal enemy
+;2 = 2 player enemy (shouldn't all enemies be in 2p mode?)
+;3 = boss
 IS_TYPE_ENEMY
           !byte 0     ;dummy entry for inactive object
           !byte 0     ;player dean
@@ -13795,15 +13831,15 @@ IS_TYPE_ENEMY
           !byte 0     ;impala driver
           !byte 0     ;impala debris
           !byte 0     ;spawn
-          !byte 1     ;boss
-          !byte 1     ;boss2
-          !byte 1     ;boss3
+          !byte 3     ;boss
+          !byte 3     ;boss2
+          !byte 3     ;boss3
           !byte 0     ;get ready
-          !byte 1     ;boss4
-          !byte 1     ;boss5
-          !byte 1     ;boss6
-          !byte 1     ;boss7
-          !byte 1     ;boss helper
+          !byte 3     ;boss4
+          !byte 3     ;boss5
+          !byte 3     ;boss6
+          !byte 3     ;boss7
+          !byte 3     ;boss helper
           
 TYPE_START_SPRITE
           !byte 0     ;dummy entry for inactive object
