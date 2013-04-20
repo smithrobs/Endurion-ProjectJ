@@ -8,6 +8,12 @@ KERNAL_SETLFS           = $ffba
 KERNAL_SETNAM           = $ffbd
 KERNAL_LOAD             = $ffd5
 
+VIC_SPRITE_X_POS        = $d000
+VIC_SPRITE_Y_POS        = $d001
+VIC_SPRITE_X_EXTEND     = $d010
+VIC_SPRITE_ENABLE       = $d015
+VIC_SPRITE_MULTICOLOR   = $d01c
+
 ;placeholder for various temp parameters
 PARAM1                  = $03
 PARAM2                  = $04
@@ -419,6 +425,13 @@ TitleScreenWithoutIRQ
           
           jsr CopyLevelToBackBuffer
           
+          lda #40
+          sta LEVEL_START_DELAY
+          lda #0
+          sta PLAYER_JUMP_POS
+          
+          jsr DisplayGetReady
+          
           lda #<TEXT_DISPLAY
           sta ZEROPAGE_POINTER_1
           lda #>TEXT_DISPLAY
@@ -452,9 +465,18 @@ GameLoop
           
           ;lda #1
           ;sta VIC_BORDER_COLOR
+          
+          lda LEVEL_START_DELAY
+          beq .GameIsOn
+          dec LEVEL_START_DELAY
+          beq .RemoveGetReady
+          jmp GameLoop
 
+.GameIsOn
           jsr GameFlowControl
           jsr DeadControl
+          lda LEVEL_START_DELAY
+          bne GameLoop
 
           jsr ObjectControl
           jsr CheckCollisions
@@ -464,6 +486,53 @@ GameLoop
           
           jmp GameLoop          
           
+.RemoveGetReady          
+          ;remove restart message
+          ldy #11
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          sta ZEROPAGE_POINTER_2
+          sta ZEROPAGE_POINTER_3
+          sta ZEROPAGE_POINTER_4
+          lda SCREEN_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+          clc
+          adc #( ( SCREEN_COLOR - SCREEN_CHAR ) & 0xff00 ) >> 8
+          sta ZEROPAGE_POINTER_2 + 1
+          sec
+          sbc #( ( SCREEN_COLOR - SCREEN_BACK_CHAR ) & 0xff00 ) >> 8
+          sta ZEROPAGE_POINTER_3 + 1
+          sec
+          sbc #( ( SCREEN_BACK_CHAR - SCREEN_BACK_COLOR ) & 0xff00 ) >> 8
+          sta ZEROPAGE_POINTER_4 + 1
+          
+          ldy #14
+          
+.ReplaceChar          
+          lda (ZEROPAGE_POINTER_4),y
+          sta (ZEROPAGE_POINTER_2),y
+          lda (ZEROPAGE_POINTER_3),y
+          sta (ZEROPAGE_POINTER_1),y
+          
+          iny
+          cpy #10
+          bne .ReplaceChar
+          
+          tya
+          clc
+          adc #30
+          tay
+
+.ReplaceChar2ndRow          
+          lda (ZEROPAGE_POINTER_4),y
+          sta (ZEROPAGE_POINTER_2),y
+          lda (ZEROPAGE_POINTER_3),y
+          sta (ZEROPAGE_POINTER_1),y
+          
+          iny
+          cpy #10
+          bne .ReplaceChar2ndRow
+          jmp GameLoop
 
 ;-----------------------------------
 ;init IRQ
@@ -669,6 +738,7 @@ GameFlowControl
           jsr BuildScreen
           
           jsr CopyLevelToBackBuffer
+          jsr DisplayGetReady
           rts
 
 
@@ -1041,7 +1111,7 @@ DeadControl
           rts
           
 .Restart
-          ;if last live return to title
+          ;if last life return to title
           lda PLAYER_LIVES
           bne .RestartLevel
           jmp CheckForHighscore
@@ -1081,38 +1151,83 @@ DeadControl
           cpy #32
           bne .ReplaceChar
           
-
-          ;TODO - respawn at correct position!
-          lda #5
-          sta PARAM1 
+          ;remove all items
+          ldy #0
           
-          lda #4
+.RemoveItem          
+          lda ITEM_ACTIVE,y
+          cmp #ITEM_NONE
+          beq .RemoveNextItem
+          
+          lda #ITEM_NONE
+          sta ITEM_ACTIVE,y
+          jsr RemoveItemImage
+          
+.RemoveNextItem
+          iny
+          cpy #ITEM_COUNT
+          bne .RemoveItem
+          
+          
+          ;refill shells
+          ldx #0
+.RefillShellImage          
+          lda #2
+          sta SCREEN_COLOR + 23 * 40 + 19,x
+          lda #7
+          sta SCREEN_COLOR + 24 * 40 + 19,x
+          
+          inx
+          cpx PLAYER_SHELLS_MAX
+          bne .RefillShellImage
+
+          lda PLAYER_SHELLS_MAX
+          sta PLAYER_SHELLS
+          
+
+          ;respawn at correct position
+          lda PLAYER_START_POS_X
+          sta PARAM1 
+          lda PLAYER_START_POS_Y
           sta PARAM2
 
           ;type
           lda #TYPE_PLAYER
           sta PARAM3
-
-          ldx #0
-          lda PARAM3
-          sta SPRITE_ACTIVE,x
+          sta SPRITE_ACTIVE
           
           ;PARAM1 and PARAM2 hold x,y already
+          ldx #0
           jsr CalcSpritePosFromCharPos
           
           ;enable sprite
-          lda BIT_TABLE,x
+          lda BIT_TABLE
           ora VIC_SPRITE_ENABLE
           sta VIC_SPRITE_ENABLE
           
           ;initialise enemy values
           lda #SPRITE_PLAYER
-          sta SPRITE_POINTER_BASE,x
+          sta SPRITE_POINTER_BASE
           
           ;look right per default
           lda #0
-          sta SPRITE_DIRECTION,x
+          sta SPRITE_DIRECTION
           
+          lda #40
+          sta LEVEL_START_DELAY
+          lda #0
+          sta PLAYER_JUMP_POS
+          sta SPRITE_FALLING
+          
+          lda #<TEXT_GET_READY
+          sta ZEROPAGE_POINTER_1
+          lda #>TEXT_GET_READY
+          sta ZEROPAGE_POINTER_1 + 1
+          lda #15
+          sta PARAM1
+          lda #11
+          sta PARAM2
+          jsr DisplayText
           rts
           
 
@@ -1928,11 +2043,21 @@ SpawnItem
           
           lda SPRITE_CHAR_POS_X,x
           sta ITEM_POS_X,y
+          ;keep item in bounds
+          cmp #37
+          bmi .XIsOk
+          lda #37
+          sta ITEM_POS_X,y
+.XIsOk          
           lda SPRITE_CHAR_POS_Y,x
           sec
           sbc #1
           sta ITEM_POS_Y,y
-
+          cmp #21
+          bne .YIsOk
+          lda #20
+          sta ITEM_POS_X,y
+.YIsOk
           stx PARAM5
           tya
           tax
@@ -3288,7 +3413,7 @@ MoveSpriteUp
           tay
           
           lda SPRITE_POS_Y,x
-          sta 53249,y
+          sta VIC_SPRITE_Y_POS,y
           rts  
 
 ;------------------------------------------------------------
@@ -3304,7 +3429,7 @@ MoveSpriteDown
           tay
           
           lda SPRITE_POS_Y,x
-          sta 53249,y
+          sta VIC_SPRITE_Y_POS,y
           rts  
 
 
@@ -3400,7 +3525,7 @@ CalcSpritePosFromCharPos
           clc
           adc #( 50 - SPRITE_CENTER_OFFSET_Y )
           sta SPRITE_POS_Y,x
-          sta 53249,y
+          sta VIC_SPRITE_Y_POS,y
           
           lda #0
           sta SPRITE_CHAR_POS_X_DELTA,x
@@ -3442,6 +3567,29 @@ CopyLevelToBackBuffer
           cpx #230
           bne .ColorLoop
           
+          rts
+
+
+;------------------------------------------------------------
+;displays get ready
+;------------------------------------------------------------
+!zone DisplayGetReady
+DisplayGetReady
+
+          lda #40
+          sta LEVEL_START_DELAY
+          lda #0
+          sta PLAYER_JUMP_POS
+          
+          lda #<TEXT_GET_READY
+          sta ZEROPAGE_POINTER_1
+          lda #>TEXT_GET_READY
+          sta ZEROPAGE_POINTER_1 + 1
+          lda #15
+          sta PARAM1
+          lda #11
+          sta PARAM2
+          jsr DisplayText
           rts
 
 
@@ -3489,6 +3637,7 @@ BuildScreen
           jsr .BuildLevel
           
           jsr DisplayLevelNumber
+          
           rts
           
 .NoMoreLevels
@@ -3498,8 +3647,6 @@ BuildScreen
           lda #0
           sta LEVEL_NR
           jsr BuildScreen
-          
-          jsr CopyLevelToBackBuffer
           rts
           
 .BuildLevel
@@ -3704,7 +3851,15 @@ LevelObject
           
           lda PARAM3
           sta SPRITE_ACTIVE,x
+          cmp #TYPE_PLAYER
+          bne .IsNotPlayer
+
+          lda PARAM1
+          sta PLAYER_START_POS_X
+          lda PARAM2
+          sta PLAYER_START_POS_Y
           
+.IsNotPlayer          
           ;PARAM1 and PARAM2 hold x,y already
           jsr CalcSpritePosFromCharPos
           
@@ -4219,6 +4374,7 @@ DisplayText
           ldy #0
 .InLineLoop
           lda (ZEROPAGE_POINTER_1),y
+          beq .SkipChar
           cmp #$2A
           beq .EndMarkerReached
           cmp #45
@@ -4226,6 +4382,7 @@ DisplayText
           sta (ZEROPAGE_POINTER_2),y
           lda #1
           sta (ZEROPAGE_POINTER_3),y
+.SkipChar          
           iny
           jmp .InLineLoop
         
@@ -4999,6 +5156,13 @@ ITEM_CHAR_LR
 ITEM_COLOR_LR
           !byte 4,2
           
+PLAYER_START_POS_X
+          !byte 0
+PLAYER_START_POS_Y
+          !byte 0
+LEVEL_START_DELAY
+          !byte 0
+          
 BIT_TABLE
           !byte 1,2,4,8,16,32,64,128
 XBIT_TABLE
@@ -5013,6 +5177,10 @@ TEXT_FIRE_TO_START
           !text "PRESS FIRE TO PLAY*"
 TEXT_ENTER_NAME
           !text "ENTER YOUR NAME*"
+          
+TEXT_GET_READY
+          !text 226,228,230,0,232,228,234,235,237,231,"-"
+          !text 227,229,231,0,233,229,233,236,231,238,"*"
           
 COLOR_FADE_POS
           !byte 0
