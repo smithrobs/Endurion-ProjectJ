@@ -368,7 +368,24 @@ IsEnemyCollidingWithPlayer
 ;------------------------------------------------------------
 !zone PlayerControl
 PlayerControl
+          lda PLAYER_SHOT_PAUSE
+          bne .FirePauseActive
+          
+          lda #1
+          sta VIC_SPRITE_COLOR
+          
+          lda #$10
+          bit $dc00
+          bne .NotFirePushed
+          
+          jsr FireShot
+          jmp .FireDone
 
+.FirePauseActive
+          dec PLAYER_SHOT_PAUSE
+
+.FireDone
+.NotFirePushed
           lda PLAYER_JUMP_POS
           bne .PlayerIsJumping
 
@@ -465,11 +482,113 @@ PlayerControl
           sta PLAYER_JUMP_POS
           jmp .JumpStopped
 
+
+;------------------------------------------------------------
+;player fires shot
+;------------------------------------------------------------
+!zone FireShot
+FireShot
+          ;frame delay until next shot
+          lda #10
+          sta PLAYER_SHOT_PAUSE
+          
+          ;mark player as shooting
+          lda #4
+          sta VIC_SPRITE_COLOR
+          
+          ldy SPRITE_CHAR_POS_Y
+          dey
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          lda SCREEN_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+          
+          ldy SPRITE_CHAR_POS_X
+          
+.ShotContinue
+          lda SPRITE_DIRECTION
+          beq .ShootRight
+
+          ;shooting left          
+          dey
+          
+          lda (ZEROPAGE_POINTER_1),y
+          jsr IsCharBlocking
+          bne .ShotDone
+          jmp .CheckHitEnemy
+          
+.ShootRight
+          iny
+          
+          lda (ZEROPAGE_POINTER_1),y
+          jsr IsCharBlocking
+          bne .ShotDone
+          
+.CheckHitEnemy          
+          ;hit an enemy?
+          ldx #1
+          
+.CheckEnemy          
+          stx PARAM2
+          lda SPRITE_ACTIVE,x
+          beq .CheckNextEnemy
+          tax
+          lda IS_TYPE_ENEMY,x
+          beq .CheckNextEnemy
+          
+          ;sprite pos matches on x?
+          ldx PARAM2
+          sty PARAM1
+          lda SPRITE_CHAR_POS_X,x
+          cmp PARAM1
+          bne .CheckNextEnemy
+          
+          ;sprite pos matches on y?
+          lda SPRITE_CHAR_POS_Y,x
+          cmp SPRITE_CHAR_POS_Y
+          beq .EnemyHit
+
+          ;sprite pos matches on y + 1?
+          clc
+          adc #1
+          cmp SPRITE_CHAR_POS_Y
+          beq .EnemyHit
+
+          ;sprite pos matches on y - 1?
+          sec
+          sbc #2
+          cmp SPRITE_CHAR_POS_Y
+          bne .CheckNextEnemy
+          
+.EnemyHit          
+          ;enemy hit!
+          dec SPRITE_HP,x
+          lda SPRITE_HP,x
+          beq .EnemyKilled
+          jmp .ShotDone
+          
+          
+.EnemyKilled          
+          jsr RemoveObject
+          jmp .ShotDone
+          
+.CheckNextEnemy     
+          ldx PARAM2
+          inx
+          cpx #8
+          bne .CheckEnemy
+          jmp  .ShotContinue
+          
+.ShotDone          
+          rts
+
 ;------------------------------------------------------------
 ;PlayerMoveLeft
 ;------------------------------------------------------------
 !zone PlayerMoveLeft
 PlayerMoveLeft  
+          lda #1
+          sta SPRITE_DIRECTION
           ldx #0
           
           ;jmp ObjectMoveLeft
@@ -552,6 +671,9 @@ ObjectMoveLeft
 ;------------------------------------------------------------
 !zone PlayerMoveRight
 PlayerMoveRight
+          lda #0
+          sta SPRITE_DIRECTION
+          
           ldx #0
 
           jmp ObjectMoveRight
@@ -1278,6 +1400,10 @@ BuildScreen
           lda #0
           sta SPRITE_DIRECTION,x
           
+          ;5 HP per default
+          lda #5
+          sta SPRITE_HP,x
+          
 .NoFreeSlot                    
           jmp .NextLevelData
           
@@ -1563,11 +1689,14 @@ PLAYER_JUMP_POS
           !byte 0
 PLAYER_JUMP_TABLE
           !byte 8,7,5,3,2,1,1,1,0,0
-          
 PLAYER_FALL_POS
           !byte 0
 FALL_SPEED_TABLE
           !byte 1,1,2,2,3,3,3,3,3,3
+PLAYER_SHOT_PAUSE
+          !byte 0
+SPRITE_HP
+          !byte 0,0,0,0,0,0,0,0
           
 SPRITE_POS_X
           !byte 0,0,0,0,0,0,0,0
@@ -1597,6 +1726,12 @@ ENEMY_BEHAVIOUR_TABLE_HI
           !byte >PlayerControl
           !byte >BehaviourDumbEnemyLR
           !byte >BehaviourDumbEnemyUD
+          
+IS_TYPE_ENEMY
+          !byte 0     ;dummy entry
+          !byte 0     ;player
+          !byte 1     ;enemy_lr
+          !byte 1     ;enemy_ud
           
 BIT_TABLE
           !byte 1,2,4,8,16,32,64,128
