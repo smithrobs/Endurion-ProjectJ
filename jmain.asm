@@ -48,7 +48,7 @@ CIA_PRA                 = $dd00
 
 PROCESSOR_PORT          = $01
 
-START_LEVEL             = 42
+START_LEVEL             = 43
 
 MUSIC_IN_GAME_TUNE		    = $00
 MUSIC_TITLE_TUNE			     = $01
@@ -345,6 +345,7 @@ TYPE_BOSS               = 27
 TYPE_BOSS2              = 28
 TYPE_BOSS3              = 29
 TYPE_GETREADY           = 30
+TYPE_BOSS4              = 31
 
 OBJECT_HEIGHT           = 8 * 2
 
@@ -5491,25 +5492,9 @@ GHOST_MOVE_SPEED = 1
           lda #0
           sta SPRITE_ANIM_DELAY,x
           
-          txa
-          and #$01
-          tay
-          lda SPRITE_ACTIVE,y
-          cmp #TYPE_PLAYER_DEAN
-          beq .FoundPlayer
-          cmp #TYPE_PLAYER_SAM
-          beq .FoundPlayer
-          
-          ;check other player
-          tya
-          eor #1
-          tay
-          lda SPRITE_ACTIVE,y
-          cmp #TYPE_PLAYER_DEAN
-          beq .FoundPlayer
-          cmp #TYPE_PLAYER_SAM
-          beq .FoundPlayer
-          
+          jsr FindPlayer
+          cmp #2
+          bne .FoundPlayer
           ;no player to hunt
           rts
           
@@ -7250,6 +7235,8 @@ CheckIsPlayerCollidingWithDiagonalBeam
 .PlayerWasDean          
           rts
 
+
+
 ;------------------------------------------------------------
 ;boss
 ;------------------------------------------------------------
@@ -7289,6 +7276,19 @@ BOSS_MOVE_SPEED = 1
           lda SPRITE_STATE,x
           and #$7f
           bne .NotFollowPlayer
+          
+          
+          lda SPRITE_DIRECTION,x
+          beq +
+          lda #SPRITE_BOSS_FOOT_L
+          jmp ++
+
+
++
+          lda #SPRITE_BOSS_FOOT_R
+++          
+          sta SPRITE_POINTER_BASE,x
+
           jmp BossFollowPlayer
           
 .NotFollowPlayer          
@@ -7558,18 +7558,11 @@ RestoreBeamHV
           rts
 
 
-
-BossFollowPlayer
-          inc SPRITE_ANIM_DELAY,x
-          lda SPRITE_ANIM_DELAY,x
-          cmp #10
-          beq .DoCheckMove
-          jmp .DoGhostMove
-
-.DoCheckMove
-          lda #0
-          sta SPRITE_ANIM_DELAY,x
-          
+;looks for player
+;x = own object index
+;returns player index in y
+!zone FindPlayer
+FindPlayer
           txa
           and #$01
           tay
@@ -7590,9 +7583,32 @@ BossFollowPlayer
           beq .FoundPlayer
           
           ;no player to hunt
+          ldy #2
           rts
           
 .FoundPlayer
+          rts
+
+
+BossFollowPlayer
+          inc SPRITE_ANIM_DELAY,x
+          lda SPRITE_ANIM_DELAY,x
+          cmp #10
+          beq .DoCheckMove
+          jmp .DoGhostMove
+
+.DoCheckMove
+          lda #0
+          sta SPRITE_ANIM_DELAY,x
+          
+          jsr FindPlayer
+          cmp #2
+          bne +
+          
+          ;no player to hunt
+          rts
+          
++
           ;player index in y
           lda SPRITE_CHAR_POS_X,y
           cmp SPRITE_CHAR_POS_X,x
@@ -7610,8 +7626,6 @@ BossFollowPlayer
           ;turning now
           lda #1
           sta SPRITE_DIRECTION,x
-          lda #SPRITE_BOSS_FOOT_L
-          sta SPRITE_POINTER_BASE,x
           jmp .CheckYNow
           
 .AlreadyLookingLeft
@@ -7778,6 +7792,17 @@ BOSS_MOVE_SPEED = 1
           lda SPRITE_STATE,x
           and #$7f
           bne .NotFollowPlayer
+          
+          lda SPRITE_DIRECTION,x
+          beq +
+          lda #SPRITE_BOSS_FOOT_L
+          jmp ++
+
+
++
+          lda #SPRITE_BOSS_FOOT_R
+++          
+          sta SPRITE_POINTER_BASE,x
           jmp BossFollowPlayer
           
 .NotFollowPlayer          
@@ -8341,29 +8366,13 @@ BOSS_MOVE_SPEED = 1
 
 .FollowPlayer
           ;above player?
-          txa
-          and #$01
-          tay
-          lda SPRITE_ACTIVE,y
-          cmp #TYPE_PLAYER_DEAN
-          beq .FoundPlayer
-          cmp #TYPE_PLAYER_SAM
-          beq .FoundPlayer
-          
-          ;check other player
-          tya
-          eor #1
-          tay
-          lda SPRITE_ACTIVE,y
-          cmp #TYPE_PLAYER_DEAN
-          beq .FoundPlayer
-          cmp #TYPE_PLAYER_SAM
-          beq .FoundPlayer
-          
+          jsr FindPlayer
+          cmp #2
+          bne ++
           ;no player to hunt
           rts
           
-.FoundPlayer
+++
           ;player index in y
           lda SPRITE_CHAR_POS_X,y
           cmp SPRITE_CHAR_POS_X,x
@@ -8531,7 +8540,184 @@ BOSS_MOVE_SPEED = 1
           lda #128
           sta SPRITE_STATE,x
           rts
+
+
+
+;------------------------------------------------------------
+;boss
+;------------------------------------------------------------
+!zone BehaviourBoss4
+BehaviourBoss4
+BOSS_MOVE_SPEED = 1
+          lda SPRITE_HITBACK,x
+          beq .NoHitBack
+
+          dec SPRITE_HITBACK,x
           
+          ldy SPRITE_HITBACK,x
+          lda BOSS_FLASH_TABLE,y
+          sta VIC_SPRITE_COLOR,x
+          
+          cpy #0
+          bne .NoHitBack
+          
+          ;make vulnerable again
+          lda SPRITE_STATE,x
+          cmp #128
+          bne .NoHitBack
+          
+          lda #0
+          sta SPRITE_STATE,x
+        
+.NoHitBack        
+          lda DELAYED_GENERIC_COUNTER
+          and #$03
+          bne .NoAnimUpdate
+          
+.NoAnimUpdate     
+          lda SPRITE_STATE,x
+          bne .NotFollowPlayer
+          
+          
+          ;check if on same height as a player
+          lda SPRITE_ACTIVE
+          cmp #TYPE_PLAYER_DEAN
+          bne ++
+          
+          lda SPRITE_CHAR_POS_Y
+          cmp SPRITE_CHAR_POS_Y,x
+          beq .StartAttackMode
+          
+++          
+
+          lda SPRITE_ACTIVE + 1
+          cmp #TYPE_PLAYER_SAM
+          bne ++
+
+          lda SPRITE_CHAR_POS_Y + 1
+          cmp SPRITE_CHAR_POS_Y,x
+          beq .StartAttackMode
+          
+++          
+          ;anim
+          lda SPRITE_DIRECTION,x
+          beq +
+          lda #SPRITE_BOSS_FOOT_L
+          jmp ++
+
+
++
+          lda #SPRITE_BOSS_FOOT_R
+++          
+          sta SPRITE_POINTER_BASE,x
+          
+          jmp BossFollowPlayer
+          
+.StartAttackMode
+          lda #1
+          sta SPRITE_STATE,x
+          lda #0
+          sta SPRITE_MOVE_POS,x
+          sta SPRITE_MODE_POS,x
+          jmp .AttackMode
+          
+.NotFollowPlayer          
+          cmp #1
+          beq .AttackMode
+          rts
+          
+.AttackMode          
+          ;Attack modes (more modes?)
+          inc SPRITE_MOVE_POS,x
+          lda SPRITE_MOVE_POS,x
+          cmp #4
+          beq .NextAttackStep
+          rts
+          
+.NextAttackStep
+          lda SPRITE_CHAR_POS_X,x
+          sta PARAM4
+          lda SPRITE_CHAR_POS_Y,x
+          sta PARAM5
+          
+          lda #0
+          sta SPRITE_MOVE_POS,x
+
+          inc SPRITE_MODE_POS,x
+          
+          lda SPRITE_MODE_POS,x
+          cmp #11
+          bcc .BeamNotDangerous
+          cmp #29
+          bcs .BeamNotDangerous
+          
+          ;does player hit beam?
+          ldy #0
+          jsr CheckIsPlayerCollidingWithBeam
+          ldy #1
+          jsr CheckIsPlayerCollidingWithBeam
+          
+.BeamNotDangerous          
+          lda SPRITE_MODE_POS,x
+          cmp #5
+          beq .BeamStep1
+          cmp #6
+          beq .BeamStep2
+          cmp #7
+          beq .BeamStep3
+          cmp #8
+          beq .BeamStep4
+          cmp #9
+          beq .BeamStep3
+          cmp #10
+          beq .BeamStep4
+          cmp #11
+          beq .BeamStep3
+          cmp #12
+          beq .BeamEnd
+          rts
+          
+.HandleBeam
+          lda BEAM_CHAR_H,y
+          sta PARAM1
+          lda BEAM_CHAR_V,y
+          sta PARAM2
+          lda BEAM_COLOR,y
+          sta PARAM3
+          
+          jsr DrawBeamH
+          jsr DrawBeamV
+          rts
+
+.BeamStep1
+          ;beam
+          ldy #BEAM_TYPE_DARK
+          jmp .HandleBeam
+          
+.BeamStep2
+          ;beam
+          ldy #BEAM_TYPE_MEDIUM
+          jmp .HandleBeam
+          
+.BeamStep3
+          ;beam
+          ldy #BEAM_TYPE_LIGHT
+          jmp .HandleBeam
+          
+.BeamStep4
+          ;beam
+          ldy #BEAM_TYPE_LIGHT2
+          jmp .HandleBeam
+          
+.BeamEnd
+          jsr RestoreBeamHV
+          
+          lda #0
+          sta SPRITE_STATE,x
+          rts
+
+
+
 ;------------------------------------------------------------
 ;explosion
 ;------------------------------------------------------------
@@ -11087,6 +11273,7 @@ ENEMY_BEHAVIOUR_TABLE_LO
           !byte <BehaviourBoss2
           !byte <BehaviourBoss3
           !byte <BehaviourNone        ;Get Ready
+          !byte <BehaviourBoss4
           
 ENEMY_BEHAVIOUR_TABLE_HI
           !byte >PlayerControl
@@ -11119,6 +11306,7 @@ ENEMY_BEHAVIOUR_TABLE_HI
           !byte >BehaviourBoss2
           !byte >BehaviourBoss3
           !byte >BehaviourNone        ;Get Ready
+          !byte >BehaviourBoss4
           
 ;behaviour for an enemy being hit          
 ENEMY_HIT_BEHAVIOUR_TABLE_LO          
@@ -11151,6 +11339,7 @@ ENEMY_HIT_BEHAVIOUR_TABLE_LO
           !byte <HitBehaviourBoss     ;boss
           !byte <HitBehaviourBoss3    ;boss
           !byte <BehaviourNone        ;Get Ready
+          !byte <HitBehaviourHurt     ;boss 4
           
           
 ENEMY_HIT_BEHAVIOUR_TABLE_HI
@@ -11183,6 +11372,7 @@ ENEMY_HIT_BEHAVIOUR_TABLE_HI
           !byte >HitBehaviourBoss     ;boss
           !byte >HitBehaviourBoss3    ;boss
           !byte >BehaviourNone        ;Get Ready
+          !byte >HitBehaviourHurt     ;boss 4
           
 IS_TYPE_ENEMY
           !byte 0     ;dummy entry for inactive object
@@ -11216,6 +11406,7 @@ IS_TYPE_ENEMY
           !byte 1     ;boss2
           !byte 1     ;boss3
           !byte 0     ;get ready
+          !byte 1     ;boss4
           
 TYPE_START_SPRITE
           !byte 0     ;dummy entry for inactive object
@@ -11249,6 +11440,7 @@ TYPE_START_SPRITE
           !byte SPRITE_BOSS_FOOT_R
           !byte SPRITE_BOSS_ARM_L
           !byte SPRITE_G
+          !byte SPRITE_BOSS_ARM_R
           
 TYPE_START_COLOR
           !byte 0
@@ -11282,6 +11474,7 @@ TYPE_START_COLOR
           !byte 0     ;boss2
           !byte 0     ;boss3
           !byte 2     ;get ready
+          !byte 0     ;boss4
           
 TYPE_START_MULTICOLOR
           !byte 0     ;dummy
@@ -11315,6 +11508,7 @@ TYPE_START_MULTICOLOR
           !byte 0     ;boss2
           !byte 0     ;boss3
           !byte 0     ;get ready
+          !byte 0     ;boss4
           
 TYPE_START_HP
           !byte 0     ;dummy
@@ -11348,6 +11542,7 @@ TYPE_START_HP
           !byte 10    ;boss2
           !byte 10    ;boss3
           !byte 0     ;get ready
+          !byte 10    ;boss4
           
 TYPE_ANNOYED_COLOR
           !byte 0     ;dummy
@@ -11381,6 +11576,7 @@ TYPE_ANNOYED_COLOR
           !byte 0     ;boss2
           !byte 0     ;boss3
           !byte 0     ;get ready
+          !byte 0     ;boss4
           
           
 ;enemy start direction, 2 bits per dir.
@@ -11430,6 +11626,7 @@ TYPE_START_DIRECTION
           !byte %00001010     ;boss2
           !byte %00001010     ;boss3
           !byte 0             ;get ready
+          !byte %00001010     ;boss4
           
 TYPE_START_STATE
           !byte 0             ;dummy
@@ -11461,8 +11658,9 @@ TYPE_START_STATE
           !byte 128           ;spawn
           !byte 0             ;boss
           !byte 0             ;boss2
-          !byte 128             ;boss3
+          !byte 128           ;boss3
           !byte 0             ;get ready
+          !byte 0             ;bos4
           
 TYPE_START_DELTA_Y
           !byte 0     ;dummy
@@ -11496,6 +11694,7 @@ TYPE_START_DELTA_Y
           !byte 0     ;boss2
           !byte 0     ;boss3
           !byte 0     ;get ready
+          !byte 0     ;boss4
           
 BAT_ANIMATION
           !byte SPRITE_BAT_1
