@@ -49,7 +49,7 @@ CIA_PRA                 = $dd00
 PROCESSOR_PORT          = $01
 
 ;START_LEVEL             = 0
-START_LEVEL             = 54
+START_LEVEL             = 59
 
 MUSIC_IN_GAME_TUNE		    = $00
 MUSIC_TITLE_TUNE			     = $01
@@ -390,7 +390,6 @@ BEAM_TYPE_LIGHT2        = 3
           sta VIC_SPRITE_ENABLE
           
           ;set charset
-          ;lda #$3c
           lda #$3e
           sta VIC_MEMORY_CONTROL
 
@@ -426,6 +425,7 @@ BEAM_TYPE_LIGHT2        = 3
           lda #%00110000
           sta PROCESSOR_PORT
           
+!ifndef CRUNCHED {          
           ;take source address from CHARSET
           LDA #<CHARSET
           STA ZEROPAGE_POINTER_1
@@ -451,8 +451,8 @@ BEAM_TYPE_LIGHT2        = 3
           sta ZEROPAGE_POINTER_1 + 1
           
           jsr CopySprites
-          
-          
+}
+
           ;store water tile bytes
           ldx #0
           
@@ -477,6 +477,19 @@ BEAM_TYPE_LIGHT2        = 3
           inx
           cpx #8
           bne -
+          
+          ldx #0
+-          
+          lda $F800 + 143 * 8,x
+          sta ANIM_TILE2_BYTES,x
+          sta ANIM_TILE2_BYTES + 8,x
+          
+          inx
+          dey
+          cpx #8
+          bne -
+          
+          
           
           ;restore ROMs
           ;lda PARAM1
@@ -515,6 +528,7 @@ BEAM_TYPE_LIGHT2        = 3
           ;bitmap multicolor          
           lda #$18
           sta $d016
+
           
 ;------------------------------------------------------------
 ;the title screen game loop
@@ -522,7 +536,7 @@ BEAM_TYPE_LIGHT2        = 3
 !zone TitleScreen
 TitleScreen
           jsr InitTitleIRQ
-
+          
 TitleScreenWithoutIRQ          
 !ifdef MUSIC_PLAYING{
           ;initialise music player
@@ -535,7 +549,7 @@ TitleScreenWithoutIRQ
           
           ldx #0
           stx BUTTON_PRESSED
-          stx BUTTON_RELEASED
+          stx BUTTON_RELEASED 
           stx VIC_SPRITE_ENABLE
           
           ;clear screen
@@ -543,7 +557,7 @@ TitleScreenWithoutIRQ
           ldy #1
           jsr ClearScreen
           
-          ;display start text
+          ;display start text 
           lda #<TEXT_FIRE_TO_START
           sta ZEROPAGE_POINTER_1
           lda #>TEXT_FIRE_TO_START
@@ -1047,9 +1061,31 @@ GameLoop
           
           lda ANIM_TILE_BYTES,y
           sta $F800 + 111 * 8
+          sta $C000 + 111 * 8
           lda ANIM_TILE_BYTES + 8,y
           sta $F800 + 111 * 8 + 1
+          sta $C000 + 111 * 8 + 1
+
+          sty PARAM1
+          lda #7
+          sec
+          sbc PARAM1
+          tay
+          ldx #0
+-          
+          lda ANIM_TILE2_BYTES,y
+          sta $F800 + 143 * 8,x
+          sta $C000 + 143 * 8,x
+          
+          inx
+          iny
+          cpx #8
+          bne -
+          
+          
 +
+
+
           ;lda #1
           ;sta VIC_BORDER_COLOR
           lda LEVEL_START_DELAY
@@ -4396,6 +4432,8 @@ ObjectControl
           tay
           lda (ZEROPAGE_POINTER_1),y
           cmp #111
+          beq .NextObject
+          cmp #143
           beq .NextObject
           
 +          
@@ -12345,11 +12383,16 @@ LEVEL_BORDER_DATA
 ANIM_TILE_BYTES
           !byte 0,0,0,0,0,0,0,0
           !byte 0,0,0,0,0,0,0,0
+ANIM_TILE2_BYTES
+          !byte 0,0,0,0,0,0,0,0
+          !byte 0,0,0,0,0,0,0,0
 ANIM_POS
           !byte 0
           
-!source "level_data.asm"          
+!source "level_data.asm"
 
+
+!ifndef CRUNCHED {
 CHARSET
           !binary "j.chr"
 CHARSET_2          
@@ -12357,3 +12400,5 @@ CHARSET_2
           
 SPRITES
           !binary "j.spr"
+END_OF_FILE
+} 
