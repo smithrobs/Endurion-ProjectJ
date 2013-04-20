@@ -49,7 +49,7 @@ CIA_PRA                 = $dd00
 PROCESSOR_PORT          = $01
 
 ;START_LEVEL             = 0
-START_LEVEL             = 0
+START_LEVEL             = 66
 
 MUSIC_IN_GAME_TUNE		    = $00
 MUSIC_TITLE_TUNE			     = $01
@@ -1446,6 +1446,8 @@ GameFlowControl
           bne .NotDoneYet
           lda NUMBER_SPAWN_SPOTS_ALIVE
           bne .NotDoneYet
+          lda NUMBER_DELAYED_SPAWN_SPOTS_ALIVE
+          bne .NotDoneYet
           lda NUMBER_SPAWNS_ALIVE
           bne .NotDoneYet
 
@@ -1529,10 +1531,52 @@ GameFlowControl
 ;------------------------------------------------------------
 !zone ProcessSpawnSpots
 ProcessSpawnSpots
+          lda NUMBER_ENEMIES_ALIVE
+          ora NUMBER_SPAWN_SPOTS_ALIVE
+          bne .NoDelayedSpawnSpots
+          
+          lda NUMBER_DELAYED_SPAWN_SPOTS_ALIVE
+          beq .NoDelayedSpawnSpots
+          
+          ;undelay them now
+          lda SPAWN_SPOT_LEVEL
+          clc
+          adc #16
+          sta SPAWN_SPOT_LEVEL
+          
+          ;check all spots
+          ldx #0
+-          
+          lda SPAWN_SPOT_ACTIVE,x
+          beq +
+          
+          lda SPAWN_SPOT_SPAWN_COUNT,x
+          and #$f0
+          cmp SPAWN_SPOT_LEVEL
+          bne +
+          
+          ;undelay now
+          lda SPAWN_SPOT_SPAWN_COUNT,x
+          and #$0f
+          sta SPAWN_SPOT_SPAWN_COUNT,x
+          
+          dec NUMBER_DELAYED_SPAWN_SPOTS_ALIVE
+          inc NUMBER_SPAWN_SPOTS_ALIVE
+          
++          
+          inx
+          cpx #SPAWN_SPOT_COUNT
+          bne -
+
+.NoDelayedSpawnSpots
           ldx #0
 .SpawnSpotLoop
           lda SPAWN_SPOT_ACTIVE,x
           beq .NextSpawnSpot
+          
+          lda SPAWN_SPOT_SPAWN_COUNT,x
+          and #$f0
+          bne .NextSpawnSpot
           
           lda SPAWN_SPOT_DELAY ,x
           beq .TryToSpawn
@@ -1558,8 +1602,6 @@ ProcessSpawnSpots
           lda NUMBER_ENEMIES_ALIVE
           clc
           adc NUMBER_SPAWNS_ALIVE
-          ;clc
-          ;adc NUMBER_SPAWN_SPOTS_ALIVE
           cmp #6
           bcs .DoNotSpawn
           
@@ -1602,7 +1644,8 @@ ProcessSpawnSpots
           ldx PARAM4
 
           dec SPAWN_SPOT_SPAWN_COUNT,x
-          beq .RemoveSpawnSpot
+          bne .DoNotSpawn
+          jmp .RemoveSpawnSpot
           
 .DoNotSpawn          
           ldx PARAM4
@@ -9799,7 +9842,9 @@ ResetObjects
           sta SPRITE_ENABLED
           sta SPRITE_MULTICOLOR
           sta NUMBER_SPAWN_SPOTS_ALIVE
+          sta NUMBER_DELAYED_SPAWN_SPOTS_ALIVE
           sta NUMBER_SPAWNS_ALIVE
+          sta SPAWN_SPOT_LEVEL
 .ClearObjectLoop
           sta SPRITE_ACTIVE,x
           sta SPRITE_FALLING,x
@@ -10618,7 +10663,6 @@ LevelSpawnSpot
           jmp NextLevelData
           
 .EmptySpotFound          
-          inc NUMBER_SPAWN_SPOTS_ALIVE
           lda #1
           sta SPAWN_SPOT_ACTIVE,x
           ;X pos
@@ -10640,7 +10684,15 @@ LevelSpawnSpot
           iny
           lda (ZEROPAGE_POINTER_1),y
           sta SPAWN_SPOT_SPAWN_COUNT,x
-
+          
+          ;upper 4 bits set? then it's a delayed spawn spot!
+          and #$f0
+          bne +
+          inc NUMBER_SPAWN_SPOTS_ALIVE
+          jmp ++
++ 
+          inc NUMBER_DELAYED_SPAWN_SPOTS_ALIVE
+++
           tya
           pha
 
@@ -12415,7 +12467,11 @@ NUMBER_ENEMIES_ALIVE
           !byte 0
 NUMBER_SPAWN_SPOTS_ALIVE
           !byte 0
+NUMBER_DELAYED_SPAWN_SPOTS_ALIVE
+          !byte 0
 NUMBER_SPAWNS_ALIVE
+          !byte 0
+SPAWN_SPOT_LEVEL
           !byte 0
           
 LEVEL_DONE_DELAY
