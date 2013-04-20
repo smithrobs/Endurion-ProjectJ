@@ -17,10 +17,10 @@ ZEROPAGE_POINTER_3      = $21
 ZEROPAGE_POINTER_4      = $23
 
 ;address of the screen buffer
-SCREEN_CHAR          = 52224
+SCREEN_CHAR             = $CC00
 
 ;address of color ram
-SCREEN_COLOR            = $d800
+SCREEN_COLOR            = $D800
 
 ;address of sprite pointers
 SPRITE_POINTER_BASE     = SCREEN_CHAR + 1016
@@ -28,11 +28,16 @@ SPRITE_POINTER_BASE     = SCREEN_CHAR + 1016
 ;number of sprites divided by four
 NUMBER_OF_SPRITES_DIV_4 = 1
 
-;sprite number constants
+;sprite number constant
 SPRITE_BASE             = 64
 
 SPRITE_PLAYER           = SPRITE_BASE + 0
 
+
+;level data constants
+LD_END                  = 0
+LD_LINE_H               = 1
+LD_LINE_V               = 2
 
 ;this creates a basic start
 *=$0801
@@ -94,27 +99,26 @@ SPRITE_PLAYER           = SPRITE_BASE + 0
           
           cli
           
-          ;test charset
-          lda #'H'
-          sta SCREEN_CHAR
-          lda #'E'
-          sta SCREEN_CHAR + 1
-          lda #'L'
-          sta SCREEN_CHAR + 2
-          sta SCREEN_CHAR + 3
-          lda #'O'
-          sta SCREEN_CHAR + 4
+          ;background black
+          lda #0
+          sta 53281
           
-          ;set char color to white
-          lda #1
-          sta SCREEN_COLOR
-          sta SCREEN_COLOR + 1
-          sta SCREEN_COLOR + 2
-          sta SCREEN_COLOR + 3
-          sta SCREEN_COLOR + 4
+          ;set charset multi colors
+          lda #12
+          sta 53282
+          lda #8
+          sta 53283
+          ;enable multi color charset
+          lda 53270
+          ora #$10
+          sta 53270
           
+          ;setup level
+          lda #0
+          sta LEVEL_NR
+          jsr BuildScreen
           
-          ;init sprite 1 pos          
+          ;init sprite 1 pos
           lda #100
           sta 53248
           sta 53248 + 1
@@ -273,6 +277,186 @@ MoveSpriteDown
           sta 53249,y
           rts  
 
+
+;------------------------------------------------------------
+;BuildScreen
+;creates a screen from level data
+;------------------------------------------------------------
+!zone BuildScreen
+BuildScreen
+          lda #0
+          ldy #6
+          jsr ClearPlayScreen
+
+          ;get pointer to real level data from table
+          ldx LEVEL_NR
+          lda SCREEN_DATA_TABLE,x
+          sta ZEROPAGE_POINTER_1
+          lda SCREEN_DATA_TABLE + 1,x
+          sta ZEROPAGE_POINTER_1 + 1
+          
+          jsr .BuildLevel
+
+          ;get pointer to real level data from table
+          lda #<LEVEL_BORDER_DATA
+          sta ZEROPAGE_POINTER_1
+          lda #>LEVEL_BORDER_DATA
+          sta ZEROPAGE_POINTER_1 + 1
+          
+          jsr .BuildLevel
+          rts
+          
+.BuildLevel
+          ;work through data
+          ldy #255
+          
+.LevelDataLoop
+          iny
+          
+          lda (ZEROPAGE_POINTER_1),y
+          cmp #LD_END
+          beq .LevelComplete
+          cmp #LD_LINE_H
+          beq .LineH
+          cmp #LD_LINE_V
+          beq .LineV
+          
+.LevelComplete          
+          rts
+          
+.NextLevelData
+          pla
+          
+          ;adjust pointers so we're able to access more 
+          ;than 256 bytes of level data
+          clc
+          adc #1
+          adc ZEROPAGE_POINTER_1
+          sta ZEROPAGE_POINTER_1
+          lda ZEROPAGE_POINTER_1 + 1
+          adc #0
+          sta ZEROPAGE_POINTER_1 + 1
+          ldy #255
+          
+          jmp .LevelDataLoop
+
+.LineH
+          ;X pos
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta PARAM1 
+          
+          ;Y pos
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta PARAM2
+
+          ;width
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta PARAM3
+          
+          ;char
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta PARAM4
+          
+          ;color
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta PARAM5
+          
+          ;store target pointers to screen and color ram
+          ldx PARAM2
+          lda SCREEN_LINE_OFFSET_TABLE_LO,x
+          sta ZEROPAGE_POINTER_2
+          sta ZEROPAGE_POINTER_3
+          lda SCREEN_LINE_OFFSET_TABLE_HI,x
+          sta ZEROPAGE_POINTER_2 + 1
+          clc
+          adc #( ( SCREEN_COLOR - SCREEN_CHAR ) & 0xff00 ) >> 8
+          sta ZEROPAGE_POINTER_3 + 1
+          
+          tya
+          pha
+          
+          ldy PARAM1
+.NextChar          
+          lda PARAM4
+          sta (ZEROPAGE_POINTER_2),y
+          lda PARAM5
+          sta (ZEROPAGE_POINTER_3),y
+          iny
+          dec PARAM3
+          bne .NextChar
+          
+          jmp .NextLevelData
+          
+.LineV
+          ;X pos
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta PARAM1 
+          
+          ;Y pos
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta PARAM2
+
+          ;height
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta PARAM3
+          
+          ;char
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta PARAM4
+          
+          ;color
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          sta PARAM5
+          
+          ;store target pointers to screen and color ram
+          ldx PARAM2
+          lda SCREEN_LINE_OFFSET_TABLE_LO,x
+          sta ZEROPAGE_POINTER_2
+          sta ZEROPAGE_POINTER_3
+          lda SCREEN_LINE_OFFSET_TABLE_HI,x
+          sta ZEROPAGE_POINTER_2 + 1
+          clc
+          adc #( ( SCREEN_COLOR - SCREEN_CHAR ) & 0xff00 ) >> 8
+          sta ZEROPAGE_POINTER_3 + 1
+          
+          tya
+          pha
+          
+          ldy PARAM1
+.NextCharV         
+          lda PARAM4
+          sta (ZEROPAGE_POINTER_2),y
+          lda PARAM5
+          sta (ZEROPAGE_POINTER_3),y
+          
+          ;adjust pointer
+          lda ZEROPAGE_POINTER_2
+          clc
+          adc #40
+          sta ZEROPAGE_POINTER_2
+          sta ZEROPAGE_POINTER_3
+          lda ZEROPAGE_POINTER_2 + 1
+          adc #0
+          sta ZEROPAGE_POINTER_2 + 1
+          clc
+          adc #( ( SCREEN_COLOR - SCREEN_CHAR ) & 0xff00 ) >> 8
+          sta ZEROPAGE_POINTER_3 + 1
+          
+          dec PARAM3
+          bne .NextCharV
+          
+          jmp .NextLevelData
+          
           
 !zone WaitFrame
           ;wait for the raster to reach line $f8
@@ -292,6 +476,38 @@ WaitFrame
           bne .WaitStep2
           
           rts
+
+
+;------------------------------------------------------------
+;clears the play area of the screen
+;A = char
+;Y = color
+;------------------------------------------------------------
+
+!zone ClearPlayScreen
+ClearPlayScreen
+            ldx #$00
+.ClearLoop          
+            sta SCREEN_CHAR,x
+            sta SCREEN_CHAR + 220,x
+            sta SCREEN_CHAR + 440,x
+            sta SCREEN_CHAR + 660,x
+            inx
+            cpx #220
+            bne .ClearLoop
+            
+            tya
+            ldx #$00
+.ColorLoop          
+            sta $d800,x
+            sta $d800 + 220,x
+            sta $d800 + 440,x
+            sta $d800 + 660,x
+            inx
+            cpx #220
+            bne .ColorLoop
+            
+            rts
 
 
 ;------------------------------------------------------------
@@ -369,9 +585,34 @@ CopySprites
           rts
           
 ;------------------------------------------------------------
+;screen data
+;------------------------------------------------------------
+SCREEN_DATA_TABLE
+          !word LEVEL_1
+          !word 0
+          
+          
+LEVEL_1
+          !byte LD_LINE_H,5,5,10,128,9
+          !byte LD_LINE_H,30,12,9,129,9
+          !byte LD_LINE_H,10,19,20,128,9
+          !byte LD_LINE_V,7,6,4,128,9
+          !byte LD_END
+
+
+LEVEL_BORDER_DATA
+          !byte LD_LINE_H,0,0,40,129,9
+          !byte LD_LINE_H,1,22,38,129,9
+          !byte LD_LINE_V,0,1,22,128,9
+          !byte LD_LINE_V,39,1,22,128,9
+          !byte LD_END
+
+;------------------------------------------------------------
 ;game variables
 ;------------------------------------------------------------
 
+LEVEL_NR  
+          !byte 0
 SPRITE_POS_X
           !byte 0,0,0,0,0,0,0,0
 SPRITE_POS_X_EXTEND
@@ -381,6 +622,58 @@ SPRITE_POS_Y
 BIT_TABLE
           !byte 1,2,4,8,16,32,64,128
           
+SCREEN_LINE_OFFSET_TABLE_LO
+          !byte ( SCREEN_CHAR +   0 ) & 0x00ff
+          !byte ( SCREEN_CHAR +  40 ) & 0x00ff
+          !byte ( SCREEN_CHAR +  80 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 120 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 160 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 200 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 240 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 280 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 320 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 360 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 400 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 440 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 480 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 520 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 560 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 600 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 640 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 680 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 720 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 760 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 800 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 840 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 880 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 920 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 960 ) & 0x00ff
+SCREEN_LINE_OFFSET_TABLE_HI
+          !byte ( ( SCREEN_CHAR +   0 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR +  40 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR +  80 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 120 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 160 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 200 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 240 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 280 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 320 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 360 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 400 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 440 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 480 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 520 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 560 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 600 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 640 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 680 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 720 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 760 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 800 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 840 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 880 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 920 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 960 ) & 0xff00 ) >> 8
 
 CHARSET
           !binary "j.chr"
