@@ -4,22 +4,35 @@
 ;define constants here
 
 ;placeholder for various temp parameters
-PARAM1    = $03
-PARAM2    = $04
-PARAM3    = $05
-PARAM4    = $06
-PARAM5    = $07
+PARAM1                  = $03
+PARAM2                  = $04
+PARAM3                  = $05
+PARAM4                  = $06
+PARAM5                  = $07
 
 ;placeholder for zero page pointers
-ZEROPAGE_POINTER_1 = $17
-ZEROPAGE_POINTER_2 = $19
-ZEROPAGE_POINTER_3 = $21
-ZEROPAGE_POINTER_4 = $23
+ZEROPAGE_POINTER_1      = $17
+ZEROPAGE_POINTER_2      = $19
+ZEROPAGE_POINTER_3      = $21
+ZEROPAGE_POINTER_4      = $23
 
 ;address of the screen buffer
-SCREEN_CHAR      = 52224
+SCREEN_CHAR          = 52224
+
 ;address of color ram
-SCREEN_COLOR        = $d800
+SCREEN_COLOR            = $d800
+
+;address of sprite pointers
+SPRITE_POINTER_BASE     = SCREEN_CHAR + 1016
+
+;number of sprites divided by four
+NUMBER_OF_SPRITES_DIV_4 = 1
+
+;sprite number constants
+SPRITE_BASE             = 64
+
+SPRITE_PLAYER           = SPRITE_BASE + 0
+
 
 ;this creates a basic start
 *=$0801
@@ -41,9 +54,9 @@ SCREEN_COLOR        = $d800
           and #$fc
           sta 56576
 
-          ;----------------------
-          ;copy charset to target          
-          ;----------------------
+          ;----------------------------------
+          ;copy charset and sprites to target          
+          ;----------------------------------
           
           ;block interrupts 
           ;since we turn ROMs off this would result in crashes if we didn't
@@ -66,7 +79,15 @@ SCREEN_COLOR        = $d800
           
           ;now copy
           jsr CopyCharSet
-
+          
+          ;take source address from SPRITES
+          lda #<SPRITES
+          sta ZEROPAGE_POINTER_1
+          lda #>SPRITES
+          sta ZEROPAGE_POINTER_1 + 1
+          
+          jsr CopySprites
+          
           ;restore ROMs
           lda PARAM1
           sta $01
@@ -84,12 +105,24 @@ SCREEN_COLOR        = $d800
           lda #'O'
           sta SCREEN_CHAR + 4
           
+          ;set char color to white
           lda #1
           sta SCREEN_COLOR
           sta SCREEN_COLOR + 1
           sta SCREEN_COLOR + 2
           sta SCREEN_COLOR + 3
           sta SCREEN_COLOR + 4
+
+          ;set sprite 1 pos          
+          lda #100
+          sta 53248
+          sta 53248 + 1
+          ;set sprite image
+          lda #SPRITE_PLAYER
+          sta SPRITE_POINTER_BASE
+          ;enable sprite 1
+          lda #1
+          sta 53248 + 21
           
 
           ;the main game loop
@@ -121,6 +154,10 @@ WaitFrame
           
           rts
 
+
+;------------------------------------------------------------
+;copies charset from ZEROPAGE_POINTER_1 to ZEROPAGE_POINTER_2
+;------------------------------------------------------------
 
 !zone CopyCharSet
 CopyCharSet
@@ -163,5 +200,38 @@ CopyCharSet
           rts
 
 
+;------------------------------------------------------------
+;copies sprites from ZEROPAGE_POINTER_1 to ZEROPAGE_POINTER_2
+;       sprites are copied in numbers of four
+;------------------------------------------------------------
+
+!zone CopySprites
+CopySprites
+          ldy #$00
+          ldx #$00
+          
+          lda #00
+          sta ZEROPAGE_POINTER_2
+          lda #$d0
+          sta ZEROPAGE_POINTER_2 + 1
+          
+          ;4 sprites per loop
+.SpriteLoop
+          lda (ZEROPAGE_POINTER_1),y
+          sta (ZEROPAGE_POINTER_2),y
+          iny
+          bne .SpriteLoop
+          inx
+          inc ZEROPAGE_POINTER_1+1
+          inc ZEROPAGE_POINTER_2+1
+          cpx #NUMBER_OF_SPRITES_DIV_4
+          bne .SpriteLoop
+
+          rts
+          
+
 CHARSET
           !binary "j.chr"
+          
+SPRITES
+          !binary "j.spr"
