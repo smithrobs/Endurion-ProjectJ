@@ -41,7 +41,7 @@ JOYSTICK_PORT_II        = $dc00
 
 CIA_PRA                 = $dd00
 
-START_LEVEL             = 11
+START_LEVEL             = 21
 
 
 ;placeholder for various temp parameters
