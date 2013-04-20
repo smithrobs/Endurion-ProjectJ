@@ -60,7 +60,7 @@ SCREEN_BACK_COLOR       = $C400
 SPRITE_POINTER_BASE     = SCREEN_CHAR + 1016
 
 ;number of sprites divided by four
-NUMBER_OF_SPRITES_DIV_4       = 17
+NUMBER_OF_SPRITES_DIV_4       = 128 / 4
 
 ;sprite number constant
 SPRITE_BASE                   = 64
@@ -120,13 +120,16 @@ SPRITE_SPIDER_STAND           = SPRITE_BASE + 44
 SPRITE_SPIDER_WALK_1          = SPRITE_BASE + 45
 SPRITE_SPIDER_WALK_2          = SPRITE_BASE + 46
 
-SPRITE_EXPLOSION_1            = SPRITE_BASE + 47
-SPRITE_EXPLOSION_2            = SPRITE_BASE + 48
-SPRITE_EXPLOSION_3            = SPRITE_BASE + 49
-SPRITE_PLAYER_DEAD            = SPRITE_BASE + 50
+SPRITE_WOLF_WALK_L_1          = SPRITE_BASE + 47
+SPRITE_WOLF_WALK_L_2          = SPRITE_BASE + 48
+SPRITE_WOLF_WALK_L_3          = SPRITE_BASE + 49
+SPRITE_WOLF_JUMP_L            = SPRITE_BASE + 50
 
 SPRITE_PLAYER_SAM_STAND_R     = SPRITE_BASE + 51
 SPRITE_PLAYER_SAM_STAND_L     = SPRITE_BASE + 52
+
+SPRITE_PLAYER_DEAD            = SPRITE_BASE + 53
+
 SPRITE_PLAYER_SAM_WALK_R_1    = SPRITE_BASE + 55
 SPRITE_PLAYER_SAM_WALK_L_1    = SPRITE_BASE + 56
 SPRITE_PLAYER_SAM_WALK_R_2    = SPRITE_BASE + 57
@@ -142,12 +145,41 @@ SPRITE_PLAYER_SAM_FALL_L      = SPRITE_BASE + 62
 SPRITE_PLAYER_SAM_POWER_R     = SPRITE_BASE + 63
 SPRITE_PLAYER_SAM_POWER_L     = SPRITE_BASE + 64
 
+SPRITE_GHOST_SKELETON_1       = SPRITE_BASE + 65
+SPRITE_GHOST_SKELETON_2       = SPRITE_BASE + 66
+SPRITE_GHOST_SKELETON_3       = SPRITE_BASE + 67
+
+SPRITE_JUMPING_TOAD_1         = SPRITE_BASE + 68
+SPRITE_JUMPING_TOAD_2         = SPRITE_BASE + 69
+SPRITE_JUMPING_TOAD_3         = SPRITE_BASE + 70
+SPRITE_JUMPING_TOAD_4         = SPRITE_BASE + 71
+
+SPRITE_EXPLOSION_1            = SPRITE_BASE + 72
+SPRITE_EXPLOSION_2            = SPRITE_BASE + 73
+SPRITE_EXPLOSION_3            = SPRITE_BASE + 74
+SPRITE_EXPLOSION_4            = SPRITE_BASE + 75
+SPRITE_EXPLOSION_5            = SPRITE_BASE + 76
+SPRITE_EXPLOSION_6            = SPRITE_BASE + 77
+SPRITE_EXPLOSION_7            = SPRITE_BASE + 78
+SPRITE_EXPLOSION_8            = SPRITE_BASE + 79
+
+SPRITE_WOLF_WALK_R_1          = SPRITE_BASE + 80
+SPRITE_WOLF_WALK_R_2          = SPRITE_BASE + 81
+SPRITE_WOLF_WALK_R_3          = SPRITE_BASE + 82
+SPRITE_WOLF_JUMP_R            = SPRITE_BASE + 83
+
+SPRITE_EYE_1                  = SPRITE_BASE + 112
+SPRITE_EYE_2                  = SPRITE_BASE + 113
+SPRITE_EYE_3                  = SPRITE_BASE + 114
+SPRITE_EYE_4                  = SPRITE_BASE + 115
+
 ;offset from calculated char pos to true sprite pos
 SPRITE_CENTER_OFFSET_X  = 8
 SPRITE_CENTER_OFFSET_Y  = 11
 
 ;entries of jump table
 JUMP_TABLE_SIZE         = 10
+TOAD_JUMP_TABLE_SIZE    = 12
 
 ;entries of fall table
 FALL_TABLE_SIZE         = 10
@@ -181,6 +213,10 @@ TYPE_BAT_VANISH         = 7
 TYPE_SPIDER             = 8
 TYPE_EXPLOSION          = 9
 TYPE_PLAYER_SAM         = 10
+TYPE_WOLFMAN            = 11
+TYPE_GHOST_SKELETON     = 12
+TYPE_JUMPING_TOAD       = 13
+TYPE_EYE                = 14
 
 OBJECT_HEIGHT           = 8 * 2
 
@@ -303,13 +339,16 @@ GT_COOP                 = 2
           lda #$18
           sta $d016
           
+!ifdef MUSIC_PLAYING{
           ;initialise music player
-          lda #15
-          sta 53248
-          
           lda #0
           jsr MUSIC_PLAYER
           
+          lda #15
+          jsr MUSIC_PLAYER + 6
+          ;sta 54272 + 24
+}
+
 ;------------------------------------------------------------
 ;the title screen game loop
 ;------------------------------------------------------------
@@ -510,7 +549,7 @@ StartGame
           ;setup level
           jsr StartLevel
           
-          lda #11
+          lda #16
           sta LEVEL_NR
           jsr BuildScreen
           
@@ -600,11 +639,13 @@ StartGame
 ;------------------------------------------------------------
 
 GameLoop  
+          ;lda #0
+          ;sta 53280
+
           jsr WaitFrame
           
           ;lda #1
           ;sta VIC_BORDER_COLOR
-          
           lda LEVEL_START_DELAY
           beq .GameIsOn
           dec LEVEL_START_DELAY
@@ -612,10 +653,13 @@ GameLoop
           jmp GameLoop
 
 .GameIsOn
+          ;lda #0
+          ;sta 53280
           jsr GameFlowControl
           lda LEVEL_START_DELAY
           bne GameLoop
 
+          ;inc 53280
           jsr ObjectControl
           
           ;check for Dean
@@ -623,6 +667,7 @@ GameLoop
           cmp #GT_SINGLE_PLAYER_SAM
           beq .NoCollisionCheckForDean
           
+          ;inc 53280
           ldx #0
           jsr CheckCollisions
           
@@ -936,7 +981,12 @@ ProcessSpawnSpots
           sta SPAWN_SPOT_DELAY,x
           
           lda NUMBER_ENEMIES_ALIVE
-          cmp #3
+          cmp #6
+          bpl .DoNotSpawn
+          
+          ;only spawn randomly
+          jsr GenerateRandomNumber
+          cmp #4
           bpl .DoNotSpawn
           
           stx PARAM4
@@ -1205,6 +1255,21 @@ CheckForHighscore
           
           
           jsr InitTitleIRQ
+          
+          ;restore bitmap logo colors
+          ldx #0
+.FillColor      
+          lda TITLE_LOGO_COLORRAM,x
+          sta SCREEN_COLOR,x
+          inx
+          bne .FillColor
+
+.FillColor2
+          lda TITLE_LOGO_COLORRAM + 256,x
+          sta SCREEN_COLOR + 256,x
+          inx
+          cpx #( 320 - 256 )
+          bne .FillColor2
           
           ldy PARAM3
           
@@ -1534,9 +1599,12 @@ IsEnemyCollidingWithPlayer
           sta SPRITE_POINTER_BASE,x
           lda #0
           sta PLAYER_FAST_RELOAD,x
-          sta PLAYER_INVINCIBLE,x
-          sta SPRITE_STATE,x
           sta PLAYER_FIRE_PRESSED_TIME,x
+          
+          lda #200
+          sta PLAYER_INVINCIBLE,x
+          lda #128
+          sta SPRITE_STATE,x
           
           ;look right per default
           lda #0
@@ -1713,7 +1781,10 @@ PlayerControl
           
           lda #0
           sta VIC_SPRITE_COLOR,x
-          
+
+          lda #1
+          jsr IncreaseScore
+
           dec SPRITE_HP,x
           bne .EnemyWasHurt
           
@@ -4102,6 +4173,150 @@ BehaviourBatVanishing
           
  
 ;------------------------------------------------------------
+;ghost skeleton
+;------------------------------------------------------------
+!zone BehaviourGhostSkeleton
+BehaviourGhostSkeleton
+          lda DELAYED_GENERIC_COUNTER
+          and #$03
+          bne .NoAnimUpdate
+          
+          inc SPRITE_ANIM_POS,x
+          lda SPRITE_ANIM_POS,x
+          and #$03
+          sta SPRITE_ANIM_POS,x
+          
+          tay
+          lda GHOST_SKELETON_ANIMATION_TABLE,y
+          sta SPRITE_POINTER_BASE,x
+          
+.NoAnimUpdate          
+.NormalUpdate          
+          ;doesn't do anything yet
+          rts
+
+
+
+;------------------------------------------------------------
+;jumping toad
+;------------------------------------------------------------
+!zone BehaviourJumpingToad
+BehaviourJumpingToad
+          lda SPRITE_HITBACK,x
+          beq .NoHitBack
+
+          dec SPRITE_HITBACK,x
+          lda SPRITE_HITBACK_DIRECTION,x
+          beq .HitBackRight
+          
+          ;move left
+          jsr ObjectMoveLeftBlocking
+          rts
+          
+.HitBackRight          
+          jsr ObjectMoveRightBlocking
+          rts
+          
+.NoHitBack          
+          lda SPRITE_STATE,x
+          beq .NotDucking
+          
+          inc SPRITE_ANIM_DELAY,x
+          lda SPRITE_ANIM_DELAY,x
+          cmp #6
+          bne .StillDucking
+          lda #0
+          sta SPRITE_ANIM_DELAY,x
+          
+          ldy SPRITE_ANIM_POS,x
+          inc SPRITE_ANIM_POS,x
+          lda TOAD_JUMP_ANIMATION_TABLE,y
+          sta SPRITE_POINTER_BASE,x
+          cmp #SPRITE_JUMPING_TOAD_1
+          bne .StillDucking
+          
+          ;start jump
+          lda #0
+          sta SPRITE_STATE,x
+          inc SPRITE_JUMP_POS,x
+          
+.StillDucking
+          rts
+          
+.NotDucking          
+          lda SPRITE_JUMP_POS,x
+          beq .FallIfPossible
+          
+          ;toad is jumping
+          lda SPRITE_JUMP_POS,x
+          cmp #TOAD_JUMP_TABLE_SIZE
+          bne .JumpOn
+          
+          ;jump done
+          jmp .JumpBlocked
+          
+.JumpOn          
+          ldy SPRITE_JUMP_POS,x
+          inc SPRITE_JUMP_POS,x
+          lda TOAD_JUMP_TABLE,y
+          bne .KeepJumping
+          
+          ;no jump movement needed
+          jmp .ToadMove
+          
+.KeepJumping          
+          sta PARAM5
+          
+.JumpContinue          
+          jsr ObjectMoveUpBlocking
+          beq .JumpBlocked
+          
+          dec PARAM5
+          bne .JumpContinue
+          jmp .ToadMove
+          
+.JumpBlocked
+          lda #0
+          sta SPRITE_JUMP_POS,x
+          jmp .ToadMove
+          
+.FallIfPossible          
+          jsr UpdateSpriteFall
+          beq .CanJump
+          jmp .ToadMove
+ 
+.CanJump
+          inc SPRITE_STATE,x
+          lda #0
+          sta SPRITE_ANIM_DELAY,x
+          sta SPRITE_ANIM_POS,x
+          
+          lda #SPRITE_JUMPING_TOAD_2
+          sta SPRITE_POINTER_BASE,x
+          rts
+ 
+          ;simple move left/right
+.ToadMove
+          lda SPRITE_DIRECTION,x
+          beq .MoveRight
+          
+          jsr ObjectMoveLeftBlocking
+          beq .ToggleDirection
+          rts
+          
+.MoveRight
+          jsr ObjectMoveRightBlocking
+          beq .ToggleDirection
+          rts
+          
+.ToggleDirection
+          lda SPRITE_DIRECTION,x
+          eor #1
+          sta SPRITE_DIRECTION,x
+          rts
+ 
+ 
+;------------------------------------------------------------
 ;run left/right, jump off directional
 ;------------------------------------------------------------
 !zone BehaviourSpider
@@ -4215,6 +4430,276 @@ BehaviourSpider
           
  
 ;------------------------------------------------------------
+;run left/right, jump off directional
+;------------------------------------------------------------
+!zone BehaviourWolf
+BehaviourWolf
+          lda SPRITE_HITBACK,x
+          beq .NoHitBack
+
+          dec SPRITE_HITBACK,x
+          lda SPRITE_HITBACK_DIRECTION,x
+          beq .HitBackRight
+          
+          ;move left
+          jsr ObjectMoveLeftBlocking
+          rts
+          
+.HitBackRight          
+          jsr ObjectMoveRightBlocking
+          rts
+          
+.NoHitBack          
+          ;animate wolf
+          lda SPRITE_JUMP_POS,x
+          bne .NoAnimUpdate
+          
+          inc SPRITE_ANIM_DELAY,x
+          lda SPRITE_ANIM_DELAY,x
+          cmp #4
+          bne .NoAnimUpdate
+          
+          lda #0
+          sta SPRITE_ANIM_DELAY,x
+          
+          inc SPRITE_ANIM_POS,x
+          lda SPRITE_ANIM_POS,x
+          and #$03
+          sta SPRITE_ANIM_POS,x
+          
+          tay
+          lda SPRITE_DIRECTION,x
+          beq .FacingLeft
+          
+          lda WOLF_ANIMATION_TABLE,y
+          sta SPRITE_POINTER_BASE,x
+          jmp .NoAnimUpdate
+          
+.FacingLeft          
+          lda WOLF_ANIMATION_TABLE,y
+          clc
+          adc #( SPRITE_WOLF_WALK_R_1 - SPRITE_WOLF_WALK_L_1 )
+          sta SPRITE_POINTER_BASE,x
+          
+.NoAnimUpdate          
+          lda SPRITE_JUMP_POS,x
+          bne .NoFallHandling
+          
+          jsr UpdateSpriteFall
+          sta SPRITE_FALLING,x
+          
+          bne .IsFalling
+          
+          ;neither jumping nor falling
+          jsr GenerateRandomNumber
+          and #$0f
+          cmp SPRITE_ANNOYED,x
+          bpl .IsFalling
+          
+          ;random jump
+          jmp .Jumping
+          
+.IsFalling          
+.NoFallHandling
+
+          lda SPRITE_ANNOYED,x
+          clc
+          adc #2
+          sta PARAM6
+.MoveStep
+          dec PARAM6
+          beq .MoveDone
+
+          lda SPRITE_DIRECTION,x
+          beq .MoveRight
+          
+          ;move left
+          lda SPRITE_JUMP_POS,x
+          ora SPRITE_FALLING,x
+          bne .OnlyMoveLeft
+          
+          jsr ObjectWalkOrJumpLeft
+          beq .ToggleDirection
+          jmp .MoveStep
+
+.MoveDone
+          lda SPRITE_JUMP_POS,x
+          beq .NotJumping
+          
+.Jumping          
+          jsr UpdateSpriteJump
+.NotJumping          
+          rts
+          
+.OnlyMoveLeft
+          jsr ObjectMoveLeftBlocking
+          beq .ToggleDirection
+          jmp .MoveStep
+          
+.MoveRight
+          lda SPRITE_JUMP_POS,x
+          ora SPRITE_FALLING,x
+          bne .OnlyMoveRight
+          
+          jsr ObjectWalkOrJumpRight
+          beq .ToggleDirection
+          jmp .MoveStep
+
+.OnlyMoveRight
+          jsr ObjectMoveRightBlocking
+          beq .ToggleDirection
+          jmp .MoveStep
+
+.ToggleDirection
+          lda SPRITE_DIRECTION,x
+          eor #1
+          sta SPRITE_DIRECTION,x
+          jmp .MoveStep
+          
+ 
+;------------------------------------------------------------
+;simply move diagonal
+;------------------------------------------------------------
+!zone BehaviourEye
+BehaviourEye
+          lda DELAYED_GENERIC_COUNTER
+          and #$03
+          bne .NoAnimUpdate
+          
+          ;inc SPRITE_ANIM_POS,x
+          ;lda SPRITE_ANIM_POS,x
+          ;and #$03
+          ;sta SPRITE_ANIM_POS,x
+          
+          ;tay
+          ;lda BAT_ANIMATION,y
+          ;sta SPRITE_POINTER_BASE,x
+          
+.NoAnimUpdate          
+          lda SPRITE_STATE,x
+          beq .Move
+          cmp #1
+          beq .EyeOpen
+          cmp #2
+          beq .EyeIsOpen
+          
+          ;eye closes
+          inc SPRITE_ANIM_DELAY,x
+          lda SPRITE_ANIM_DELAY,x
+          cmp #3
+          bne .NoActionNow
+
+          lda #0
+          sta SPRITE_ANIM_DELAY,x
+          
+          ;close animation
+          dec SPRITE_ANIM_POS,x
+          dec SPRITE_POINTER_BASE,x
+          
+          ldy SPRITE_ANIM_POS,x
+          lda EYE_COLOR_TABLE,y
+          sta VIC_SPRITE_COLOR,x
+          
+          cpy #0
+          bne .NoActionNow
+          
+          ;can move again
+          lda #0
+          sta SPRITE_STATE,x
+          rts
+          
+          
+.EyeOpen
+          inc SPRITE_ANIM_DELAY,x
+          lda SPRITE_ANIM_DELAY,x
+          cmp #3
+          bne .NoActionNow
+
+          lda #0
+          sta SPRITE_ANIM_DELAY,x
+
+          ;open animation
+          inc SPRITE_ANIM_POS,x
+          inc SPRITE_POINTER_BASE,x
+          
+          ldy SPRITE_ANIM_POS,x
+          lda EYE_COLOR_TABLE,y
+          sta VIC_SPRITE_COLOR,x
+          
+          cpy #3
+          bne .NoActionNow
+          
+          ;now wait
+          inc SPRITE_STATE,x
+          rts
+          
+.EyeIsOpen
+          inc SPRITE_ANIM_DELAY,x
+          lda SPRITE_ANIM_DELAY,x
+          cmp #30
+          beq .EyeCloseNow
+          
+.NoActionNow          
+          rts
+          
+.EyeCloseNow
+          lda #3
+          sta SPRITE_STATE,x
+          lda #0
+          sta SPRITE_ANIM_DELAY,x
+          rts
+          
+.Move
+          jsr GenerateRandomNumber
+          cmp #7
+          bne .MoveNow
+          
+          ;start blinking
+          lda #1
+          sta SPRITE_STATE,x
+          rts
+
+.MoveNow
+          lda SPRITE_DIRECTION,x
+          beq .MoveRight
+          
+          ;move left
+          jsr ObjectMoveLeftBlocking
+          beq .ToggleDirection
+          jmp .MoveY
+          
+.MoveRight
+          jsr ObjectMoveRightBlocking
+          beq .ToggleDirection
+          jmp .MoveY
+          
+.ToggleDirection
+          lda SPRITE_DIRECTION,x
+          eor #1
+          sta SPRITE_DIRECTION,x
+          
+.MoveY
+          lda SPRITE_DIRECTION_Y,x
+          beq .MoveDown
+          
+          ;move up
+          jsr ObjectMoveUpBlocking
+          beq .ToggleDirectionY
+          rts
+          
+.MoveDown
+          jsr ObjectMoveDownBlocking
+          beq .ToggleDirectionY
+          rts
+          
+.ToggleDirectionY
+          lda SPRITE_DIRECTION_Y,x
+          eor #1
+          sta SPRITE_DIRECTION_Y,x
+          rts
+ 
+ 
+;------------------------------------------------------------
 ;explosion
 ;------------------------------------------------------------
 !zone BehaviourExplosion
@@ -4233,12 +4718,10 @@ BehaviourExplosion
           
           inc SPRITE_ANIM_POS,x
           lda SPRITE_ANIM_POS,x
-          cmp #3
+          cmp #8
           beq .ExplosionDone
          
-          clc
-          adc #SPRITE_EXPLOSION_1
-          sta SPRITE_POINTER_BASE,x
+          inc SPRITE_POINTER_BASE,x
           rts
           
 
@@ -4326,6 +4809,203 @@ HitBehaviourHurtTurn
           rts
           
  
+;place the data at a valid bitmap position, this avoids copying the data        
+* = $2000        
+TITLE_LOGO_BMP_DATA
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,12,51,201,54,0,0,0,0,136,162,94,247
+        !byte 0,0,0,0,0,2,138,1,0,0,0,0,192,48,188,96,0,0,0,0,12,15,9,13,0,0,0,0,128,162,98,130
+        !byte 0,0,0,0,204,255,149,213,0,0,0,0,136,162,94,215,0,0,0,0,0,1,69,1,0,0,0,0,136,32,95,90
+        !byte 0,0,0,0,12,51,151,37,0,0,0,0,0,1,69,1,0,0,0,0,204,255,165,154,0,0,0,0,128,32,120,222
+        !byte 0,0,0,0,0,2,137,2,0,0,0,0,168,170,94,86,0,0,0,0,8,2,137,3,0,0,0,0,136,160,92,88
+        !byte 0,0,0,0,8,2,10,1,0,0,0,0,204,240,172,92,0,0,0,0,8,34,9,33,0,0,0,0,136,170,85,125
+        !byte 0,0,0,0,136,170,85,125,0,0,0,0,128,32,72,67,0,0,0,0,0,0,128,96,0,0,0,0,8,2,37,5
+        !byte 0,0,0,0,128,0,98,192,0,0,0,3,51,255,233,230,0,0,0,0,32,136,94,247,0,0,0,0,0,0,16,64
+        !byte 0,0,0,0,8,2,10,1,0,0,0,0,204,240,172,92,0,0,0,0,1,4,0,0,0,0,0,0,48,252,36,228
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,231,23,215,23,215,22,230,37,165,173,173,169,171,162,170,234
+        !byte 206,2,206,2,206,1,206,13,88,80,88,88,92,88,92,90,9,3,11,3,11,3,2,3,64,1,64,1,65,1,65,1
+        !byte 150,214,150,150,150,150,150,150,229,173,229,173,173,173,229,173,200,226,106,98,106,98,106,226,156,239,172,223,155,159,91,91
+        !byte 165,41,139,3,138,2,128,0,69,1,69,1,69,1,5,1,155,159,91,159,91,159,91,159,230,38,246,53,53,53,246,54
+        !byte 69,1,69,1,69,1,65,1,86,85,85,149,149,149,149,213,207,243,188,179,124,111,108,95,88,208,216,176,216,176,216,240
+        !byte 14,2,14,1,13,1,13,13,88,92,88,91,87,155,215,150,9,33,139,35,10,2,128,2,109,233,237,169,173,41,173,41
+        !byte 109,121,107,234,106,226,232,224,75,99,107,227,201,161,139,9,108,96,108,96,108,80,108,80,9,13,14,13,14,1,14,2
+        !byte 133,80,65,0,65,4,65,5,230,231,214,230,214,230,150,231,249,201,253,205,205,205,253,205,224,72,224,72,224,72,224,200
+        !byte 14,2,14,1,14,1,14,13,152,92,88,91,87,155,215,150,0,0,0,0,0,0,64,0,232,251,251,59,247,43,231,39
+        !byte 0,0,64,0,64,0,64,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,165,41,11,2,10,2,0,0,111,91,86,149,149,229,229,57
+        !byte 206,253,253,253,190,109,126,110,88,92,88,95,88,92,88,95,10,1,2,1,10,1,10,1,65,65,65,65,65,65,64,1
+        !byte 150,149,149,149,149,213,149,213,229,245,87,94,122,226,232,160,133,81,69,1,69,1,5,1,86,94,85,85,86,94,86,94
+        !byte 136,32,120,248,136,160,128,0,5,1,5,1,5,21,5,21,91,159,91,86,85,90,91,91,166,182,216,114,104,242,248,218
+        !byte 65,0,1,0,1,0,65,1,165,233,169,237,174,226,191,99,91,91,86,86,86,85,85,149,156,144,92,144,92,80,92,80
+        !byte 9,9,197,53,245,53,245,38,151,149,149,213,149,213,85,181,192,192,128,240,128,176,112,112,201,57,57,57,57,57,57,57
+        !byte 232,224,232,96,232,224,104,96,9,9,9,9,9,9,9,9,108,80,108,92,92,92,92,92,14,2,14,13,14,13,13,13
+        !byte 65,69,69,69,69,69,65,69,150,167,150,149,213,150,214,150,169,173,182,220,90,252,158,150,80,64,0,64,0,64,16,64
+        !byte 9,9,197,53,245,53,245,38,151,149,149,213,149,213,85,149,192,192,128,240,128,176,112,176,150,54,150,54,150,54,182,54
+        !byte 64,64,64,80,64,80,64,80,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,32,40,38,165,45,173,45,165,45,165,247
+        !byte 110,110,111,111,127,175,188,195,91,95,91,91,91,154,150,213,14,49,253,57,249,230,150,87,64,65,64,1,64,1,64,0
+        !byte 149,213,149,213,150,214,215,23,64,64,64,0,64,0,64,0,5,1,5,1,5,1,5,1,91,91,87,91,87,86,86,85
+        !byte 204,3,207,62,249,233,165,85,15,51,143,115,79,115,124,112,86,94,86,94,86,94,94,218,155,219,151,214,230,229,229,53
+        !byte 15,3,207,3,192,243,188,115,250,114,248,112,96,112,80,80,149,213,229,37,245,57,249,13,88,88,88,88,88,88,88,80
+        !byte 231,23,215,27,216,220,156,208,229,245,245,57,249,61,13,2,104,112,104,112,120,80,88,80,57,13,57,13,57,13,9,13
+        !byte 104,96,104,96,104,96,96,224,9,3,9,3,10,2,8,2,88,92,88,95,91,91,86,213,9,9,137,45,135,182,214,92
+        !byte 65,0,65,0,65,0,65,0,149,149,149,149,149,151,21,55,230,230,229,245,233,249,249,205,192,192,240,128,176,124,108,92
+        !byte 231,23,215,27,152,220,172,144,229,245,229,57,249,61,13,2,104,240,104,112,120,80,88,80,231,43,231,43,247,43,231,38
+        !byte 128,160,128,0,136,34,138,37,0,0,0,0,136,168,96,104,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,9,2,0,0,0,0,0,0,91,175,252,0,0,0,0,0
+        !byte 64,0,64,0,0,0,0,0,229,58,255,0,0,0,0,0,91,175,252,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 150,42,136,0,0,0,0,0,0,0,0,0,0,0,0,0,9,2,0,0,0,0,0,0,170,85,68,0,0,0,0,0
+        !byte 170,85,68,0,0,0,0,0,132,80,64,0,0,0,0,0,164,85,68,0,0,0,0,0,165,42,136,0,0,0,0,0
+        !byte 128,80,64,0,0,0,0,0,160,16,64,0,0,0,0,0,5,1,4,0,0,0,0,0,164,81,68,0,0,0,0,0
+        !byte 160,16,64,0,0,0,0,0,5,1,0,0,0,0,0,0,164,80,68,0,0,0,0,0,9,2,8,0,0,0,0,0
+        !byte 64,0,64,0,0,0,0,0,0,0,0,0,0,0,0,0,149,42,136,0,0,0,0,0,164,80,68,0,0,0,0,0
+        !byte 1,0,0,0,0,0,0,0,38,42,34,0,0,0,0,0,41,138,34,0,0,0,0,0,160,84,16,0,0,0,0,0
+        !byte 160,16,64,0,0,0,0,0,5,1,0,0,0,0,0,0,164,80,68,0,0,0,0,0,229,63,204,0,0,0,0,0
+        !byte 149,255,204,0,0,0,0,0,144,68,80,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+
+
+        ;here is some free memory in between!
+TITLE_LOGO_COLORRAM
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,6,8,0,6,6,0,6,8,0,8,6,0,6,8,0,8,8,8,0,6,0,8
+        !byte 8,8,0,0,8,6,8,0,0,6,0,6,0,0,0,0,0,0,6,8,6,8,8,0,6,8,8,6,8,0,6,6
+        !byte 0,6,6,8,6,6,8,8,8,8,6,6,0,6,6,8,6,6,0,6,0,0,0,0,0,0,8,6,6,6,0,0
+        !byte 6,8,0,8,8,0,6,8,0,6,6,6,6,8,6,6,8,0,6,6,0,6,8,0,6,8,6,8,0,0,0,0
+        !byte 0,0,0,8,6,6,6,0,6,0,0,6,6,6,8,6,6,8,6,0,6,6,8,6,8,8,6,8,0,8,6,6
+        !byte 6,6,8,6,0,0,0,0,0,0,0,6,0,6,6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,6,6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+
+SCREEN_LINE_OFFSET_TABLE_LO
+          !byte ( SCREEN_CHAR +   0 ) & 0x00ff
+          !byte ( SCREEN_CHAR +  40 ) & 0x00ff
+          !byte ( SCREEN_CHAR +  80 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 120 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 160 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 200 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 240 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 280 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 320 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 360 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 400 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 440 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 480 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 520 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 560 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 600 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 640 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 680 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 720 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 760 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 800 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 840 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 880 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 920 ) & 0x00ff
+          !byte ( SCREEN_CHAR + 960 ) & 0x00ff
+          
+SCREEN_LINE_OFFSET_TABLE_HI
+          !byte ( ( SCREEN_CHAR +   0 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR +  40 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR +  80 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 120 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 160 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 200 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 240 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 280 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 320 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 360 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 400 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 440 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 480 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 520 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 560 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 600 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 640 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 680 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 720 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 760 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 800 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 840 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 880 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 920 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_CHAR + 960 ) & 0xff00 ) >> 8
+          
+SCREEN_BACK_LINE_OFFSET_TABLE_HI
+          !byte ( ( SCREEN_BACK_CHAR +   0 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_BACK_CHAR +  40 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_BACK_CHAR +  80 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_BACK_CHAR + 120 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_BACK_CHAR + 160 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_BACK_CHAR + 200 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_BACK_CHAR + 240 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_BACK_CHAR + 280 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_BACK_CHAR + 320 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_BACK_CHAR + 360 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_BACK_CHAR + 400 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_BACK_CHAR + 440 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_BACK_CHAR + 480 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_BACK_CHAR + 520 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_BACK_CHAR + 560 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_BACK_CHAR + 600 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_BACK_CHAR + 640 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_BACK_CHAR + 680 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_BACK_CHAR + 720 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_BACK_CHAR + 760 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_BACK_CHAR + 800 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_BACK_CHAR + 840 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_BACK_CHAR + 880 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_BACK_CHAR + 920 ) & 0xff00 ) >> 8
+          !byte ( ( SCREEN_BACK_CHAR + 960 ) & 0xff00 ) >> 8
+
+* = $2c00
+TITLE_LOGO_SCREEN_CHAR
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,120,118,134,120,120,134,120,118,96,118,120,96,120,118,134,118,118,118,134,120,118,118
+        !byte 118,118,120,118,118,120,118,96,134,120,96,120,0,0,0,0,0,0,120,118,120,118,118,96,120,118,118,120,118,96,120,120
+        !byte 96,120,120,118,120,120,118,118,118,118,120,120,104,120,120,118,120,120,96,120,96,0,0,0,0,0,118,120,120,120,134,96
+        !byte 120,118,104,118,118,96,120,118,96,120,120,120,120,118,120,120,118,118,120,120,96,120,118,96,120,118,120,118,96,0,0,0
+        !byte 0,0,134,118,120,120,120,96,120,96,96,120,120,120,118,120,120,118,120,118,120,120,118,120,118,118,120,118,96,118,120,120
+        !byte 120,120,118,120,134,134,0,0,0,0,134,120,96,120,120,0,134,0,134,104,104,104,104,134,104,104,96,104,104,96,104,134
+        !byte 96,0,134,104,96,134,134,104,104,96,104,120,120,104,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+
+* = $3000
+MUSIC_PLAYER
+!binary "gt2music.bin"
+
+
 ;------------------------------------------------------------
 ;hit behaviour crumbling (zombie)
 ;------------------------------------------------------------
@@ -4578,6 +5258,7 @@ DisplayGetReady
           rts
 
 
+
 ;------------------------------------------------------------
 ;BuildScreen
 ;creates a screen from level data
@@ -4697,6 +5378,8 @@ NextLevelData
           
           jmp .LevelDataLoop
 
+
+
 !zone LevelLineH
 LevelLineH
           ;X pos
@@ -4750,202 +5433,6 @@ LevelLineH
           
           jmp NextLevelData
 
-
-;place the data at a valid bitmap position, this avoids copying the data        
-* = $2000        
-TITLE_LOGO_BMP_DATA
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,98
-        !byte 0,0,0,0,0,42,37,85,0,0,0,0,0,0,128,85,0,0,0,0,0,0,0,64,0,0,0,0,0,0,128,84
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,84,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,84,0,0,0,0,0,0,0,1,0,0,0,0,0,0,32,80
-        !byte 0,0,0,0,0,0,0,1,0,0,0,0,0,0,32,88,0,0,0,0,0,0,0,1,0,0,0,0,0,0,136,85
-        !byte 0,0,0,0,0,0,0,80,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1
-        !byte 0,0,0,0,0,0,0,64,0,0,0,0,0,0,0,5,0,0,0,0,0,0,0,64,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,4,52,60,60,31,31,223,160,5,9,5,1,1,85,85
-        !byte 1,1,1,1,1,5,5,9,0,144,144,156,148,148,148,164,9,1,1,0,8,0,0,0,97,72,77,105,65,64,130,128
-        !byte 89,235,235,235,235,235,233,233,106,218,250,246,246,254,246,246,129,148,162,166,165,165,170,170,170,170,170,169,169,168,168,169
-        !byte 168,170,10,9,9,1,0,0,0,0,0,0,0,64,0,0,255,247,255,239,255,255,239,239,84,101,25,89,89,89,21,23
-        !byte 0,0,0,0,0,0,0,0,85,105,105,105,107,106,110,102,2,2,130,98,98,90,218,218,84,164,100,100,84,92,80,28
-        !byte 0,1,1,1,1,1,1,1,108,100,167,171,171,171,169,169,1,10,11,10,11,139,66,65,85,174,149,149,85,85,69,69
-        !byte 85,151,148,149,149,148,148,148,68,129,145,133,69,65,1,1,0,96,216,248,244,244,244,244,9,11,1,1,1,0,0,0
-        !byte 66,224,128,64,64,64,128,128,5,191,31,31,31,31,31,31,80,149,70,85,117,117,85,69,0,0,64,144,144,144,144,144
-        !byte 0,0,0,0,0,0,0,0,0,148,20,117,85,85,85,85,0,0,0,0,0,0,64,64,0,8,8,4,4,4,5,5
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,21,21,22,22,5,1,1,3,84,85,165,173,106,106,90,90
-        !byte 5,5,101,101,85,85,213,213,164,164,164,164,164,164,180,180,0,0,0,0,0,0,1,5,64,64,64,64,65,64,64,64
-        !byte 107,107,107,107,106,106,107,107,91,91,95,95,255,254,104,96,166,166,162,146,146,66,2,2,170,170,170,170,170,165,165,165
-        !byte 0,0,128,0,92,0,192,0,0,0,0,0,1,1,1,1,101,101,101,101,102,102,101,101,85,89,89,85,151,151,167,101
-        !byte 0,0,0,0,0,0,0,0,102,38,37,37,37,45,33,33,149,181,165,165,169,105,107,106,16,24,90,90,82,88,88,88
-        !byte 1,173,43,11,135,167,39,39,90,218,218,250,250,218,170,170,192,192,240,240,112,176,176,176,5,5,9,9,9,9,11,5
-        !byte 148,148,148,148,148,148,148,148,9,1,9,9,9,1,1,1,167,172,164,164,167,167,164,164,0,0,0,0,0,0,0,0
-        !byte 64,64,64,64,64,64,64,64,26,26,26,26,26,26,26,26,85,85,85,86,123,233,89,89,144,80,144,208,64,64,64,64
-        !byte 3,3,3,3,1,1,1,2,215,214,150,85,85,85,85,85,96,96,64,96,96,80,80,80,5,5,5,37,38,31,31,31
-        !byte 0,0,0,0,64,96,64,80,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,16,35,15,22,22,22,22,6,214,214,25
-        !byte 149,149,149,149,93,127,127,67,164,164,167,167,165,101,101,90,8,2,7,167,167,94,94,252,64,64,1,65,1,64,0,0
-        !byte 107,107,235,235,235,235,251,55,64,64,128,128,128,0,0,0,2,2,2,2,5,5,1,1,165,165,165,165,173,237,237,235
-        !byte 0,0,10,169,102,87,87,111,1,1,162,226,209,208,208,80,101,101,101,101,101,101,101,100,107,107,235,233,218,218,218,250
-        !byte 128,128,72,104,88,80,88,240,16,16,16,16,176,48,16,16,90,90,22,22,6,7,7,1,88,88,212,212,248,250,248,248
-        !byte 57,57,57,249,201,245,228,228,246,246,254,254,61,15,15,3,148,148,148,148,180,164,164,228,13,13,15,15,11,11,11,3
-        !byte 164,156,164,164,156,156,144,144,1,1,1,1,2,0,0,0,167,167,167,167,100,101,101,25,0,0,0,0,1,2,130,244
-        !byte 64,64,0,0,128,0,0,0,26,26,26,218,26,26,26,25,86,86,86,86,85,85,85,69,240,240,112,176,176,188,188,164
-        !byte 15,15,12,4,4,8,8,0,5,5,1,1,1,1,1,0,80,80,88,84,116,116,116,116,26,26,30,22,26,26,26,26
-        !byte 80,80,80,80,90,90,85,85,0,0,0,0,160,120,120,244,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,9,0,0,0,0,0,0,0,245,4,160,0,0,0,0,0
-        !byte 64,0,0,0,0,0,0,0,159,37,41,0,0,0,0,0,250,88,168,32,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 21,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,2,0,0,0,0,0,170,85,85,255,240,0,0,0
-        !byte 170,85,85,48,0,0,0,0,64,96,160,0,0,0,0,0,144,128,32,0,0,0,0,0,22,53,13,3,0,0,0,0
-        !byte 160,80,112,0,0,0,0,0,16,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,216,128,128,0,0,0,0,0
-        !byte 152,40,0,0,0,0,0,0,1,0,0,0,0,0,0,0,152,160,0,0,0,0,0,0,1,0,0,0,0,0,0,0
-        !byte 96,128,128,0,0,0,0,0,0,0,0,0,0,0,0,0,9,0,0,0,0,0,0,0,164,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,57,48,0,0,0,0,0,0,129,1,0,0,0,0,0,0,168,84,84,192,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,220,12,8,0,0,0,0,0,58,21,53,51,15,0,0,0
-        !byte 170,85,93,240,0,0,0,0,248,88,80,128,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-
-
-        ;here is some free memory in between!
-TITLE_LOGO_COLORRAM
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,9,0,0,11,0,12,9,9,0,0,0,0,9,12
-        !byte 0,12,8,11,0,9,8,12,12,0,8,12,8,8,11,0,0,8,0,0,0,0,0,0,0,0,11,12,8,12,0,0
-        !byte 12,8,0,0,11,0,0,11,0,11,12,0,8,9,9,12,0,0,11,0,0,0,12,12,9,12,0,8,0,0,0,0
-        !byte 0,0,11,11,11,11,8,0,11,0,0,12,8,8,0,9,8,8,12,8,11,9,12,9,11,0,11,9,0,11,0,9
-        !byte 9,0,8,12,0,8,0,0,0,0,0,12,0,8,8,0,0,0,0,11,11,0,0,11,11,0,0,12,0,0,0,0
-        !byte 0,0,0,0,0,11,0,11,0,0,9,11,11,8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-
-SCREEN_LINE_OFFSET_TABLE_LO
-          !byte ( SCREEN_CHAR +   0 ) & 0x00ff
-          !byte ( SCREEN_CHAR +  40 ) & 0x00ff
-          !byte ( SCREEN_CHAR +  80 ) & 0x00ff
-          !byte ( SCREEN_CHAR + 120 ) & 0x00ff
-          !byte ( SCREEN_CHAR + 160 ) & 0x00ff
-          !byte ( SCREEN_CHAR + 200 ) & 0x00ff
-          !byte ( SCREEN_CHAR + 240 ) & 0x00ff
-          !byte ( SCREEN_CHAR + 280 ) & 0x00ff
-          !byte ( SCREEN_CHAR + 320 ) & 0x00ff
-          !byte ( SCREEN_CHAR + 360 ) & 0x00ff
-          !byte ( SCREEN_CHAR + 400 ) & 0x00ff
-          !byte ( SCREEN_CHAR + 440 ) & 0x00ff
-          !byte ( SCREEN_CHAR + 480 ) & 0x00ff
-          !byte ( SCREEN_CHAR + 520 ) & 0x00ff
-          !byte ( SCREEN_CHAR + 560 ) & 0x00ff
-          !byte ( SCREEN_CHAR + 600 ) & 0x00ff
-          !byte ( SCREEN_CHAR + 640 ) & 0x00ff
-          !byte ( SCREEN_CHAR + 680 ) & 0x00ff
-          !byte ( SCREEN_CHAR + 720 ) & 0x00ff
-          !byte ( SCREEN_CHAR + 760 ) & 0x00ff
-          !byte ( SCREEN_CHAR + 800 ) & 0x00ff
-          !byte ( SCREEN_CHAR + 840 ) & 0x00ff
-          !byte ( SCREEN_CHAR + 880 ) & 0x00ff
-          !byte ( SCREEN_CHAR + 920 ) & 0x00ff
-          !byte ( SCREEN_CHAR + 960 ) & 0x00ff
-          
-SCREEN_LINE_OFFSET_TABLE_HI
-          !byte ( ( SCREEN_CHAR +   0 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_CHAR +  40 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_CHAR +  80 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_CHAR + 120 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_CHAR + 160 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_CHAR + 200 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_CHAR + 240 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_CHAR + 280 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_CHAR + 320 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_CHAR + 360 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_CHAR + 400 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_CHAR + 440 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_CHAR + 480 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_CHAR + 520 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_CHAR + 560 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_CHAR + 600 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_CHAR + 640 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_CHAR + 680 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_CHAR + 720 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_CHAR + 760 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_CHAR + 800 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_CHAR + 840 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_CHAR + 880 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_CHAR + 920 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_CHAR + 960 ) & 0xff00 ) >> 8
-          
-SCREEN_BACK_LINE_OFFSET_TABLE_HI
-          !byte ( ( SCREEN_BACK_CHAR +   0 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_BACK_CHAR +  40 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_BACK_CHAR +  80 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_BACK_CHAR + 120 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_BACK_CHAR + 160 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_BACK_CHAR + 200 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_BACK_CHAR + 240 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_BACK_CHAR + 280 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_BACK_CHAR + 320 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_BACK_CHAR + 360 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_BACK_CHAR + 400 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_BACK_CHAR + 440 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_BACK_CHAR + 480 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_BACK_CHAR + 520 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_BACK_CHAR + 560 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_BACK_CHAR + 600 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_BACK_CHAR + 640 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_BACK_CHAR + 680 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_BACK_CHAR + 720 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_BACK_CHAR + 760 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_BACK_CHAR + 800 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_BACK_CHAR + 840 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_BACK_CHAR + 880 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_BACK_CHAR + 920 ) & 0xff00 ) >> 8
-          !byte ( ( SCREEN_BACK_CHAR + 960 ) & 0xff00 ) >> 8
-
-* = $2c00
-TITLE_LOGO_SCREEN_CHAR
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,176,0,176,0,144,155,139,139,176,139,0,0,144,0,176,144,176,155,176,155,144,155
-        !byte 144,0,0,176,176,144,144,0,0,0,0,0,0,0,0,0,0,0,203,155,155,152,155,155,200,200,184,184,200,176,200,152
-        !byte 0,152,155,152,144,200,155,152,152,152,155,155,155,155,152,152,0,155,144,155,0,0,0,0,0,0,152,152,155,152,176,176
-        !byte 152,155,184,152,200,144,152,152,0,152,152,155,155,200,200,155,152,155,152,0,144,152,152,152,203,155,155,155,155,0,0,0
-        !byte 0,0,200,152,152,152,155,176,152,155,184,152,155,155,152,200,155,203,152,155,152,200,152,203,152,155,152,203,155,152,152,200
-        !byte 203,144,155,152,155,155,0,0,0,0,203,155,176,155,155,0,176,0,155,152,152,155,155,152,152,192,176,155,203,176,201,176
-        !byte 155,0,201,156,0,152,155,152,0,0,203,152,152,155,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-
-* = $3000
-MUSIC_PLAYER
-!binary "gt2music.bin"
 
 !zone LevelLineV          
 LevelLineV
@@ -5480,7 +5967,7 @@ LevelSpawnSpot
           lda SPAWN_SPOT_ACTIVE,x
           beq .EmptySpotFound
           inx
-          cpx SPAWN_SPOT_COUNT
+          cpx #SPAWN_SPOT_COUNT
           bne .ExamineNextSpot
           jmp NextLevelData
           
@@ -5532,11 +6019,12 @@ WaitFrame
           lda $d012
           cmp #$F8
           bne .WaitStep2
-          
+
+!ifdef MUSIC_PLAYING{
           ;play music
           jsr MUSIC_PLAYER + 3
           rts
-
+}
 
 ;------------------------------------------------------------
 ;Looks for an empty sprite slot, returns in X
@@ -5939,8 +6427,8 @@ DivideBy10
 ;------------------------------------------------------------
 !zone IsCharBlocking
 IsCharBlocking
-          cmp #128
-          bpl .Blocking
+          cmp #192
+          bcs .Blocking
           
           lda #0
           rts
@@ -5959,8 +6447,8 @@ IsCharBlocking
 ;------------------------------------------------------------
 !zone IsCharBlockingFall
 IsCharBlockingFall
-          cmp #96
-          bpl .Blocking
+          cmp #160
+          bcs .Blocking
           
           lda #0
           rts
@@ -6193,6 +6681,11 @@ JUMP_TABLE
           !byte 8,8,7,5,3,2,1,1,1,0
 FALL_SPEED_TABLE
           !byte 1,1,2,2,3,3,3,3,3,3
+          
+TOAD_JUMP_TABLE
+          !byte 12,11,10,8,6,4,3,2,1,1,1,0
+
+
 PLAYER_SHOT_PAUSE
           !byte 0,0
 PLAYER_FIRE_PRESSED_TIME
@@ -6292,6 +6785,10 @@ ENEMY_BEHAVIOUR_TABLE_LO
           !byte <BehaviourSpider
           !byte <BehaviourExplosion
           !byte <PlayerControl
+          !byte <BehaviourWolf
+          !byte <BehaviourGhostSkeleton
+          !byte <BehaviourJumpingToad
+          !byte <BehaviourEye
           
 ENEMY_BEHAVIOUR_TABLE_HI
           !byte >PlayerControl
@@ -6304,6 +6801,10 @@ ENEMY_BEHAVIOUR_TABLE_HI
           !byte >BehaviourSpider
           !byte >BehaviourExplosion
           !byte >PlayerControl
+          !byte >BehaviourWolf
+          !byte >BehaviourGhostSkeleton
+          !byte >BehaviourJumpingToad
+          !byte >BehaviourEye
           
 ;behaviour for an enemy being hit          
 ENEMY_HIT_BEHAVIOUR_TABLE_LO          
@@ -6316,6 +6817,10 @@ ENEMY_HIT_BEHAVIOUR_TABLE_LO
           !byte <HitBehaviourHurt     ;spider
           !byte <HitBehaviourHurt     ;explosion
           !byte <HitBehaviourHurt     ;dummy entry sam
+          !byte <HitBehaviourHurt     ;wolf
+          !byte <HitBehaviourHurt     ;ghost skeleton
+          !byte <HitBehaviourHurt     ;jumping toad
+          !byte <HitBehaviourHurt     ;eye
           
 ENEMY_HIT_BEHAVIOUR_TABLE_HI
           !byte >HitBehaviourHurt     ;bat diagonal
@@ -6327,6 +6832,10 @@ ENEMY_HIT_BEHAVIOUR_TABLE_HI
           !byte >HitBehaviourHurt     ;spider
           !byte >HitBehaviourHurt     ;explosion
           !byte >HitBehaviourHurt     ;dummy entry sam
+          !byte >HitBehaviourHurt     ;wolf
+          !byte >HitBehaviourHurt     ;ghost skeleton
+          !byte >HitBehaviourHurt     ;jumping toad
+          !byte >HitBehaviourHurt     ;eye
           
 IS_TYPE_ENEMY
           !byte 0     ;dummy entry for inactive object
@@ -6340,6 +6849,10 @@ IS_TYPE_ENEMY
           !byte 1     ;spider
           !byte 0     ;explosion
           !byte 0     ;player sam
+          !byte 1     ;wolf
+          !byte 1     ;ghost skeleton
+          !byte 1     ;jumping toad
+          !byte 1     ;eye
           
 TYPE_START_SPRITE
           !byte 0     ;dummy entry for inactive object
@@ -6353,6 +6866,10 @@ TYPE_START_SPRITE
           !byte SPRITE_SPIDER_STAND
           !byte SPRITE_EXPLOSION_1
           !byte SPRITE_PLAYER_SAM_STAND_R
+          !byte SPRITE_WOLF_WALK_R_1
+          !byte SPRITE_GHOST_SKELETON_1
+          !byte SPRITE_JUMPING_TOAD_1
+          !byte SPRITE_EYE_1
           
 TYPE_START_COLOR
           !byte 0
@@ -6364,34 +6881,46 @@ TYPE_START_COLOR
           !byte 5
           !byte 3
           !byte 7
-          !byte 15    ;explosion
+          !byte 7     ;explosion
           !byte 10    ;player sam
+          !byte 3     ;wolf
+          !byte 3     ;ghost skeleton
+          !byte 5     ;jumping toad
+          !byte 1     ;eye
           
 TYPE_START_MULTICOLOR
-          !byte 0
-          !byte 1
-          !byte 0
-          !byte 0
-          !byte 0
-          !byte 0
-          !byte 1
-          !byte 0
-          !byte 1
+          !byte 0     ;dummy
+          !byte 1     ;player dean
+          !byte 1     ;bat 1
+          !byte 1     ;bat 1
+          !byte 1     ;bat 2
+          !byte 0     ;mummy
+          !byte 1     ;zombie
+          !byte 1     ;nasty bat
+          !byte 1     ;spider
           !byte 1     ;explosion
           !byte 1     ;player sam
+          !byte 1     ;wolf
+          !byte 1     ;ghost skeleton
+          !byte 1     ;jumping toad
+          !byte 1     ;eye
           
 TYPE_START_HP
           !byte 0     ;dummy
           !byte 1     ;player dean
-          !byte 5     ;bat 1
-          !byte 5     ;bat 1
-          !byte 5     ;bat 2
-          !byte 10    ;mummy
-          !byte 8     ;zombie
+          !byte 3     ;bat 1
+          !byte 3     ;bat 1
+          !byte 3     ;bat 2
+          !byte 5     ;mummy
+          !byte 4     ;zombie
           !byte 3     ;nasty bat
           !byte 2     ;spider
           !byte 0     ;explosion
           !byte 1     ;player sam
+          !byte 3     ;wolf
+          !byte 3     ;ghost skeleton
+          !byte 3     ;jumping toad
+          !byte 2     ;eye
           
 TYPE_ANNOYED_COLOR
           !byte 0     ;dummy
@@ -6405,6 +6934,10 @@ TYPE_ANNOYED_COLOR
           !byte 2     ;spider
           !byte 0     ;explosion
           !byte 10    ;player sam
+          !byte 10    ;wolf
+          !byte 3     ;ghost skeleton
+          !byte 5     ;jumping toad
+          !byte 5     ;eye
           
           
 ;enemy start direction, 2 bits per dir.
@@ -6429,6 +6962,10 @@ TYPE_START_DIRECTION
           !byte 2             ;spider
           !byte 0             ;explosion
           !byte 0             ;player sam
+          !byte %00000010     ;wolf
+          !byte 0             ;ghost skeleton
+          !byte %00000010     ;jumping toad
+          !byte %00001010     ;eye
           
 BAT_ANIMATION
           !byte SPRITE_BAT_1
@@ -6441,6 +6978,31 @@ SPIDER_ANIMATION_TABLE
           !byte SPRITE_SPIDER_WALK_1
           !byte SPRITE_SPIDER_STAND
           !byte SPRITE_SPIDER_WALK_2
+          
+WOLF_ANIMATION_TABLE
+          !byte SPRITE_WOLF_WALK_L_1
+          !byte SPRITE_WOLF_WALK_L_2
+          !byte SPRITE_WOLF_WALK_L_3
+          !byte SPRITE_WOLF_WALK_L_2
+
+GHOST_SKELETON_ANIMATION_TABLE
+          !byte SPRITE_GHOST_SKELETON_1
+          !byte SPRITE_GHOST_SKELETON_2
+          !byte SPRITE_GHOST_SKELETON_3
+          !byte SPRITE_GHOST_SKELETON_2
+          
+TOAD_JUMP_ANIMATION_TABLE
+          !byte SPRITE_JUMPING_TOAD_3
+          !byte SPRITE_JUMPING_TOAD_4
+          !byte SPRITE_JUMPING_TOAD_3
+          !byte SPRITE_JUMPING_TOAD_2
+          !byte SPRITE_JUMPING_TOAD_1
+
+EYE_COLOR_TABLE
+          !byte 1
+          !byte 7
+          !byte 13
+          !byte 5
 
 PATH_8_DX
           !byte $86
@@ -6658,43 +7220,47 @@ SCREEN_DATA_TABLE
           !word LEVEL_10
           !word LEVEL_11
           !word LEVEL_12
+          !word LEVEL_13
+          !word LEVEL_14
+          !word LEVEL_15
+          !word LEVEL_16
+          !word LEVEL_17
           !word 0
           
-          
 LEVEL_1
-          !byte LD_LINE_H,5,5,10,96,13
-          !byte LD_LINE_H,12,7,8,96,13
-          !byte LD_LINE_H,30,12,9,97,13
-          !byte LD_LINE_H_ALT,10,19,20,96,13
-          !byte LD_LINE_V_ALT,7,6,4,128,9
-          !byte LD_LINE_H,19,8,3,96,13
-          !byte LD_LINE_H,24,10,4,96,13
-          !byte LD_LINE_H,20,11,4,96,13
+          !byte LD_LINE_H,5,5,10,160,13
+          !byte LD_LINE_H,12,7,8,160,13
+          !byte LD_LINE_H,30,12,9,161,13
+          !byte LD_LINE_H_ALT,10,19,20,160,13
+          !byte LD_LINE_V_ALT,7,6,4,192,9
+          !byte LD_LINE_H,19,8,3,160,13
+          !byte LD_LINE_H,24,10,4,160,13
+          !byte LD_LINE_H,20,11,4,160,13
           !byte LD_QUAD,20,4,0
           !byte LD_QUAD,25,6,0
-          !byte LD_LINE_H,16,12,4,96,13
-          !byte LD_LINE_H,12,13,4,96,13
-          !byte LD_LINE_H,8,14,4,96,13
-          !byte LD_LINE_H,6,16,5,96,13
+          !byte LD_LINE_H,16,12,4,160,13
+          !byte LD_LINE_H,12,13,4,160,13
+          !byte LD_LINE_H,8,14,4,160,13
+          !byte LD_LINE_H,6,16,5,160,13
           !byte LD_OBJECT,5,4,TYPE_PLAYER_DEAN
           !byte LD_OBJECT,34,4,TYPE_PLAYER_SAM
           !byte LD_OBJECT,34,11,TYPE_BAT_DIAG
           !byte LD_OBJECT,31,12,TYPE_BAT_8
           !byte LD_OBJECT,10,18,TYPE_BAT_UD
           !byte LD_OBJECT,20,18,TYPE_MUMMY
-          !byte LD_AREA,2,8,7,5,96,13
+          !byte LD_AREA,2,8,7,5,160,13
           !byte LD_END
 
 LEVEL_2
-          !byte LD_LINE_H,5,5,10,96,13
-          !byte LD_LINE_H,1,21,38,96,13
-          !byte LD_LINE_H,7,7,3,96,13
-          !byte LD_LINE_H,9,9,3,96,13
-          !byte LD_LINE_H,11,11,3,96,13
-          !byte LD_LINE_H,13,13,3,96,13
-          !byte LD_LINE_H,15,15,3,96,13
-          !byte LD_LINE_H,17,17,3,96,13
-          !byte LD_LINE_H,19,19,3,96,13
+          !byte LD_LINE_H,5,5,10,160,13
+          !byte LD_LINE_H,1,21,38,160,13
+          !byte LD_LINE_H,7,7,3,160,13
+          !byte LD_LINE_H,9,9,3,160,13
+          !byte LD_LINE_H,11,11,3,160,13
+          !byte LD_LINE_H,13,13,3,160,13
+          !byte LD_LINE_H,15,15,3,160,13
+          !byte LD_LINE_H,17,17,3,160,13
+          !byte LD_LINE_H,19,19,3,160,13
           !byte LD_OBJECT,19,20,TYPE_PLAYER_DEAN
           !byte LD_OBJECT,22,20,TYPE_PLAYER_SAM
           !byte LD_OBJECT,4,5,TYPE_BAT_DIAG
@@ -6702,10 +7268,10 @@ LEVEL_2
           !byte LD_END
 
 LEVEL_3
-          !byte LD_LINE_H,25,15,10,96,13
-          !byte LD_LINE_H,17,18,8,96,13
-          !byte LD_LINE_H,5,15,10,96,13
-          !byte LD_LINE_H,25,21,8,96,13
+          !byte LD_LINE_H,25,15,10,160,13
+          !byte LD_LINE_H,17,18,8,160,13
+          !byte LD_LINE_H,5,15,10,160,13
+          !byte LD_LINE_H,25,21,8,160,13
           !byte LD_OBJECT,30,14,TYPE_PLAYER_DEAN
           !byte LD_OBJECT,10,14,TYPE_PLAYER_SAM
           !byte LD_OBJECT,9,12,TYPE_BAT_VANISH
@@ -6713,16 +7279,16 @@ LEVEL_3
 
 LEVEL_4
           !byte LD_AREA,1,1,38,21,2,13
-          !byte LD_LINE_H_ALT,1,5,20,96,13
-          !byte LD_LINE_H_ALT,25,5,14,96,13
-          !byte LD_LINE_H_ALT,1,8,10,96,13
-          !byte LD_LINE_H_ALT,15,8,24,96,13
-          !byte LD_LINE_H_ALT,1,11,18,96,13
-          !byte LD_LINE_H_ALT,23,11,16,96,13
-          !byte LD_LINE_H_ALT,1,14,33,96,13
-          !byte LD_LINE_H_ALT,38,14,2,96,13
-          !byte LD_LINE_H_ALT,6,17,33,96,13
-          !byte LD_LINE_H_ALT,12,20,6,96,13
+          !byte LD_LINE_H_ALT,1,5,20,160,13
+          !byte LD_LINE_H_ALT,25,5,14,160,13
+          !byte LD_LINE_H_ALT,1,8,10,160,13
+          !byte LD_LINE_H_ALT,15,8,24,160,13
+          !byte LD_LINE_H_ALT,1,11,18,160,13
+          !byte LD_LINE_H_ALT,23,11,16,160,13
+          !byte LD_LINE_H_ALT,1,14,33,160,13
+          !byte LD_LINE_H_ALT,38,14,2,160,13
+          !byte LD_LINE_H_ALT,6,17,33,160,13
+          !byte LD_LINE_H_ALT,12,20,6,160,13
           !byte LD_OBJECT,3,21,TYPE_PLAYER_DEAN
           !byte LD_OBJECT,36,21,TYPE_PLAYER_SAM
           !byte LD_OBJECT,33,4,TYPE_ZOMBIE
@@ -6734,17 +7300,17 @@ LEVEL_4
           !byte LD_END
 
 LEVEL_5
-          !byte LD_LINE_H_ALT,5,7,4,96,13
-          !byte LD_LINE_H_ALT,5,10,9,96,13
-          !byte LD_LINE_H_ALT,4,13,3,96,13
-          !byte LD_LINE_H_ALT,1,16,3,96,13
-          !byte LD_LINE_H_ALT,10,19,6,96,13
-          !byte LD_LINE_H_ALT,16,10,4,96,13
-          !byte LD_LINE_H_ALT,22,10,4,96,13
-          !byte LD_LINE_H_ALT,24,7,15,96,13
-          !byte LD_LINE_H_ALT,24,13,11,96,13
-          !byte LD_LINE_H_ALT,24,16,11,96,13
-          !byte LD_LINE_H_ALT,28,19,4,96,13
+          !byte LD_LINE_H_ALT,5,7,4,160,13
+          !byte LD_LINE_H_ALT,5,10,9,160,13
+          !byte LD_LINE_H_ALT,4,13,3,160,13
+          !byte LD_LINE_H_ALT,1,16,3,160,13
+          !byte LD_LINE_H_ALT,10,19,6,160,13
+          !byte LD_LINE_H_ALT,16,10,4,160,13
+          !byte LD_LINE_H_ALT,22,10,4,160,13
+          !byte LD_LINE_H_ALT,24,7,15,160,13
+          !byte LD_LINE_H_ALT,24,13,11,160,13
+          !byte LD_LINE_H_ALT,24,16,11,160,13
+          !byte LD_LINE_H_ALT,28,19,4,160,13
           
           !byte LD_OBJECT,13,18,TYPE_PLAYER_DEAN
           !byte LD_OBJECT,26,18,TYPE_PLAYER_SAM
@@ -6756,14 +7322,14 @@ LEVEL_5
           !byte LD_END
 
 LEVEL_6
-          !byte LD_LINE_H_ALT,1,10,5,96,13
-          !byte LD_LINE_H_ALT,1,13,9,96,13
-          !byte LD_LINE_H_ALT,1,16,13,96,13
-          !byte LD_LINE_H_ALT,1,19,17,96,13
-          !byte LD_LINE_H_ALT,34,10,5,96,13
-          !byte LD_LINE_H_ALT,30,13,9,96,13
-          !byte LD_LINE_H_ALT,26,16,13,96,13
-          !byte LD_LINE_H_ALT,22,19,17,96,13
+          !byte LD_LINE_H_ALT,1,10,5,160,13
+          !byte LD_LINE_H_ALT,1,13,9,160,13
+          !byte LD_LINE_H_ALT,1,16,13,160,13
+          !byte LD_LINE_H_ALT,1,19,17,160,13
+          !byte LD_LINE_H_ALT,34,10,5,160,13
+          !byte LD_LINE_H_ALT,30,13,9,160,13
+          !byte LD_LINE_H_ALT,26,16,13,160,13
+          !byte LD_LINE_H_ALT,22,19,17,160,13
           
           !byte LD_OBJECT,19,21,TYPE_PLAYER_DEAN
           !byte LD_OBJECT,21,21,TYPE_PLAYER_SAM
@@ -6774,22 +7340,22 @@ LEVEL_6
           !byte LD_END
 
 LEVEL_7
-          !byte LD_LINE_H_ALT,1,5,5,96,13
-          !byte LD_LINE_H_ALT,1,8,5,96,13
-          !byte LD_LINE_H_ALT,1,11,5,96,13
-          !byte LD_LINE_H_ALT,1,14,5,96,13
-          !byte LD_LINE_H_ALT,1,17,5,96,13
-          !byte LD_LINE_H_ALT,1,20,5,96,13
+          !byte LD_LINE_H_ALT,1,5,5,160,13
+          !byte LD_LINE_H_ALT,1,8,5,160,13
+          !byte LD_LINE_H_ALT,1,11,5,160,13
+          !byte LD_LINE_H_ALT,1,14,5,160,13
+          !byte LD_LINE_H_ALT,1,17,5,160,13
+          !byte LD_LINE_H_ALT,1,20,5,160,13
           
-          !byte LD_LINE_H_ALT,34,5,5,96,13
-          !byte LD_LINE_H_ALT,34,8,5,96,13
-          !byte LD_LINE_H_ALT,34,11,5,96,13
-          !byte LD_LINE_H_ALT,34,14,5,96,13
-          !byte LD_LINE_H_ALT,34,17,5,96,13
-          !byte LD_LINE_H_ALT,34,20,5,96,13
+          !byte LD_LINE_H_ALT,34,5,5,160,13
+          !byte LD_LINE_H_ALT,34,8,5,160,13
+          !byte LD_LINE_H_ALT,34,11,5,160,13
+          !byte LD_LINE_H_ALT,34,14,5,160,13
+          !byte LD_LINE_H_ALT,34,17,5,160,13
+          !byte LD_LINE_H_ALT,34,20,5,160,13
           
-          !byte LD_LINE_V_ALT,6,8,11,128,9
-          !byte LD_LINE_V_ALT,33,8,11,128,9
+          !byte LD_LINE_V_ALT,6,8,11,192,9
+          !byte LD_LINE_V_ALT,33,8,11,192,9
           
           !byte LD_OBJECT,19,21,TYPE_PLAYER_DEAN
           !byte LD_OBJECT,21,21,TYPE_PLAYER_SAM
@@ -6801,22 +7367,22 @@ LEVEL_7
           !byte LD_END
 
 LEVEL_8
-          !byte LD_LINE_H_ALT,1,5,5,96,13
-          !byte LD_LINE_H_ALT,10,5,20,96,13
-          !byte LD_LINE_H_ALT,34,5,5,96,13
-          !byte LD_LINE_H_ALT,1,8,5,96,13
-          !byte LD_LINE_H_ALT,10,8,20,96,13
-          !byte LD_LINE_H_ALT,34,8,5,96,13
+          !byte LD_LINE_H_ALT,1,5,5,160,13
+          !byte LD_LINE_H_ALT,10,5,20,160,13
+          !byte LD_LINE_H_ALT,34,5,5,160,13
+          !byte LD_LINE_H_ALT,1,8,5,160,13
+          !byte LD_LINE_H_ALT,10,8,20,160,13
+          !byte LD_LINE_H_ALT,34,8,5,160,13
           !byte LD_LINE_V_ALT,10,6,3,2,13
           !byte LD_LINE_V_ALT,16,6,3,2,13
           !byte LD_LINE_V_ALT,23,6,3,2,13
           !byte LD_LINE_V_ALT,29,6,3,2,13
-          !byte LD_LINE_H_ALT,5,11,7,96,13
-          !byte LD_LINE_H_ALT,28,11,7,96,13
-          !byte LD_LINE_H_ALT,10,14,20,96,13
-          !byte LD_LINE_H_ALT,5,17,7,96,13
-          !byte LD_LINE_H_ALT,28,17,7,96,13
-          !byte LD_LINE_H_ALT,10,20,20,96,13
+          !byte LD_LINE_H_ALT,5,11,7,160,13
+          !byte LD_LINE_H_ALT,28,11,7,160,13
+          !byte LD_LINE_H_ALT,10,14,20,160,13
+          !byte LD_LINE_H_ALT,5,17,7,160,13
+          !byte LD_LINE_H_ALT,28,17,7,160,13
+          !byte LD_LINE_H_ALT,10,20,20,160,13
           !byte LD_OBJECT,19,21,TYPE_PLAYER_DEAN
           !byte LD_OBJECT,21,21,TYPE_PLAYER_SAM
           !byte LD_OBJECT,15,5,TYPE_BAT_DIAG  
@@ -6827,21 +7393,21 @@ LEVEL_8
           !byte LD_END
 
 LEVEL_9
-          !byte LD_LINE_H_ALT,1,19,12,96,13
-          !byte LD_LINE_H_ALT,14,19,12,96,13
-          !byte LD_LINE_H_ALT,29,19,12,96,13
+          !byte LD_LINE_H_ALT,1,19,12,160,13
+          !byte LD_LINE_H_ALT,14,19,12,160,13
+          !byte LD_LINE_H_ALT,29,19,12,160,13
           !byte LD_OBJECT,19,21,TYPE_PLAYER_DEAN
           !byte LD_OBJECT,21,21,TYPE_PLAYER_SAM          
           !byte LD_OBJECT,37,18,TYPE_SPIDER
           !byte LD_END
 
 LEVEL_10
-          !byte LD_LINE_H_ALT,1,5,14,96,13
-          !byte LD_LINE_H_ALT,13,8,14,96,13
-          !byte LD_LINE_H_ALT,25,11,14,96,13
-          !byte LD_LINE_H_ALT,13,14,14,96,13
-          !byte LD_LINE_H_ALT,1,17,14,96,13
-          !byte LD_LINE_H_ALT,1,20,38,96,13
+          !byte LD_LINE_H_ALT,1,5,14,160,13
+          !byte LD_LINE_H_ALT,13,8,14,160,13
+          !byte LD_LINE_H_ALT,25,11,14,160,13
+          !byte LD_LINE_H_ALT,13,14,14,160,13
+          !byte LD_LINE_H_ALT,1,17,14,160,13
+          !byte LD_LINE_H_ALT,1,20,38,160,13
           !byte LD_LINE_H_ALT,1,21,38,2,13
           
           !byte LD_OBJECT,18,19,TYPE_PLAYER_DEAN
@@ -6855,12 +7421,12 @@ LEVEL_10
           !byte LD_END
 
 LEVEL_11
-          !byte LD_LINE_H_ALT,1,5,14,96,13
-          !byte LD_LINE_H_ALT,13,8,14,96,13
-          !byte LD_LINE_H_ALT,25,11,14,96,13
-          !byte LD_LINE_H_ALT,13,14,14,96,13
-          !byte LD_LINE_H_ALT,1,17,14,96,13
-          !byte LD_LINE_H_ALT,1,20,38,96,13
+          !byte LD_LINE_H_ALT,1,5,14,160,13
+          !byte LD_LINE_H_ALT,13,8,14,160,13
+          !byte LD_LINE_H_ALT,25,11,14,160,13
+          !byte LD_LINE_H_ALT,13,14,14,160,13
+          !byte LD_LINE_H_ALT,1,17,14,160,13
+          !byte LD_LINE_H_ALT,1,20,38,160,13
           !byte LD_LINE_H_ALT,1,21,38,2,13
           !byte LD_QUAD,3,3,1
           
@@ -6875,35 +7441,135 @@ LEVEL_11
           !byte LD_END
 
 LEVEL_12
+          !byte LD_QUAD,3,3,2
+          
           !byte LD_QUAD,6,3,1
-          !byte LD_LINE_H_ALT,4,5,6,96,13
+          !byte LD_LINE_H_ALT,4,5,6,160,13
           !byte LD_QUAD,6,8,1
-          !byte LD_LINE_H_ALT,4,10,6,96,13
+          !byte LD_LINE_H_ALT,4,10,6,160,13
           !byte LD_QUAD,6,13,1
-          !byte LD_LINE_H_ALT,4,15,6,96,13
+          !byte LD_LINE_H_ALT,4,15,6,160,13
           !byte LD_QUAD,32,3,1
-          !byte LD_LINE_H_ALT,30,5,6,96,13
+          !byte LD_LINE_H_ALT,30,5,6,160,13
           !byte LD_QUAD,32,8,1
-          !byte LD_LINE_H_ALT,30,10,6,96,13
+          !byte LD_LINE_H_ALT,30,10,6,160,13
           !byte LD_QUAD,32,13,1
-          !byte LD_LINE_H_ALT,30,15,6,96,13
+          !byte LD_LINE_H_ALT,30,15,6,160,13
           
-          !byte LD_OBJECT,18,19,TYPE_PLAYER_DEAN
-          !byte LD_OBJECT,21,19,TYPE_PLAYER_SAM
+          !byte LD_OBJECT,18,21,TYPE_PLAYER_DEAN
+          !byte LD_OBJECT,21,21,TYPE_PLAYER_SAM
           
-          !byte LD_SPAWN_SPOT,6,3,TYPE_ZOMBIE,5
-          !byte LD_SPAWN_SPOT,6,8,TYPE_ZOMBIE,5
-          !byte LD_SPAWN_SPOT,6,13,TYPE_ZOMBIE,5
-          !byte LD_SPAWN_SPOT,32,3,TYPE_ZOMBIE,5
-          !byte LD_SPAWN_SPOT,32,8,TYPE_ZOMBIE,5
-          !byte LD_SPAWN_SPOT,32,13,TYPE_ZOMBIE,5
+          !byte LD_SPAWN_SPOT,6,4,TYPE_ZOMBIE,5
+          !byte LD_SPAWN_SPOT,6,9,TYPE_ZOMBIE,5
+          !byte LD_SPAWN_SPOT,6,14,TYPE_ZOMBIE,5
+          !byte LD_SPAWN_SPOT,32,4,TYPE_ZOMBIE,5
+          !byte LD_SPAWN_SPOT,32,9,TYPE_ZOMBIE,5
+          !byte LD_SPAWN_SPOT,32,14,TYPE_ZOMBIE,5
           !byte LD_END
 
+LEVEL_13
+          !byte LD_LINE_H,25,15,10,160,13
+          !byte LD_LINE_H,17,18,8,160,13
+          !byte LD_LINE_H,5,15,10,160,13
+          !byte LD_LINE_H,25,21,8,160,13
+          !byte LD_OBJECT,30,14,TYPE_PLAYER_DEAN
+          !byte LD_OBJECT,10,14,TYPE_PLAYER_SAM
+          !byte LD_OBJECT,9,12,TYPE_WOLFMAN
+          !byte LD_END
+
+LEVEL_14
+          !byte LD_LINE_H,1,10,18,160,13
+          !byte LD_LINE_H,1,13,18,160,13
+          !byte LD_LINE_H,1,16,18,160,13
+          !byte LD_LINE_H,1,19,18,160,13
+          !byte LD_LINE_H,22,10,18,160,13
+          !byte LD_LINE_H,22,13,18,160,13
+          !byte LD_LINE_H,22,16,18,160,13
+          !byte LD_LINE_H,22,19,18,160,13
+          !byte LD_OBJECT,30,15,TYPE_PLAYER_DEAN
+          !byte LD_OBJECT,10,15,TYPE_PLAYER_SAM
+          !byte LD_OBJECT,9,12,TYPE_WOLFMAN
+          !byte LD_OBJECT,30,12,TYPE_WOLFMAN
+          !byte LD_OBJECT,9,18,TYPE_WOLFMAN
+          !byte LD_OBJECT,30,18,TYPE_WOLFMAN
+          !byte LD_END
+
+LEVEL_15
+          !byte LD_LINE_H,1,10,18,160,13
+          !byte LD_LINE_H,1,13,18,160,13
+          !byte LD_LINE_H,1,16,18,160,13
+          !byte LD_LINE_H,1,19,18,160,13
+          !byte LD_LINE_H,22,10,18,160,13
+          !byte LD_LINE_H,22,13,18,160,13
+          !byte LD_LINE_H,22,16,18,160,13
+          !byte LD_LINE_H,22,19,18,160,13
+          !byte LD_OBJECT,30,15,TYPE_PLAYER_DEAN
+          !byte LD_OBJECT,10,15,TYPE_PLAYER_SAM
+          !byte LD_OBJECT,9,11,TYPE_GHOST_SKELETON
+          !byte LD_OBJECT,30,11,TYPE_GHOST_SKELETON
+          !byte LD_OBJECT,9,17,TYPE_GHOST_SKELETON
+          !byte LD_OBJECT,30,17,TYPE_GHOST_SKELETON
+          !byte LD_END
+
+LEVEL_16
+          !byte LD_LINE_H_ALT,1,5,5,160,13
+          !byte LD_LINE_H_ALT,1,8,5,160,13
+          !byte LD_LINE_H_ALT,1,11,5,160,13
+          !byte LD_LINE_H_ALT,1,14,5,160,13
+          !byte LD_LINE_H_ALT,1,17,5,160,13
+          !byte LD_LINE_H_ALT,1,20,5,160,13
+          
+          !byte LD_LINE_H_ALT,34,5,5,160,13
+          !byte LD_LINE_H_ALT,34,8,5,160,13
+          !byte LD_LINE_H_ALT,34,11,5,160,13
+          !byte LD_LINE_H_ALT,34,14,5,160,13
+          !byte LD_LINE_H_ALT,34,17,5,160,13
+          !byte LD_LINE_H_ALT,34,20,5,160,13
+          
+          !byte LD_LINE_V_ALT,6,8,11,192,9
+          !byte LD_LINE_V_ALT,33,8,11,192,9
+          
+          !byte LD_OBJECT,19,21,TYPE_PLAYER_DEAN
+          !byte LD_OBJECT,21,21,TYPE_PLAYER_SAM
+          !byte LD_OBJECT,15,5,TYPE_JUMPING_TOAD
+          !byte LD_OBJECT,20,5,TYPE_JUMPING_TOAD  
+          !byte LD_OBJECT,25,5,TYPE_JUMPING_TOAD  
+          !byte LD_OBJECT,17,9,TYPE_JUMPING_TOAD  
+          !byte LD_OBJECT,23,9,TYPE_JUMPING_TOAD  
+          !byte LD_END
+
+LEVEL_17
+          !byte LD_LINE_H_ALT,1,5,5,160,13
+          !byte LD_LINE_H_ALT,10,5,20,160,13
+          !byte LD_LINE_H_ALT,34,5,5,160,13
+          !byte LD_LINE_H_ALT,1,8,5,160,13
+          !byte LD_LINE_H_ALT,10,8,20,160,13
+          !byte LD_LINE_H_ALT,34,8,5,160,13
+          !byte LD_LINE_V_ALT,10,6,3,2,13
+          !byte LD_LINE_V_ALT,16,6,3,2,13
+          !byte LD_LINE_V_ALT,23,6,3,2,13
+          !byte LD_LINE_V_ALT,29,6,3,2,13
+          !byte LD_LINE_H_ALT,5,11,7,160,13
+          !byte LD_LINE_H_ALT,28,11,7,160,13
+          !byte LD_LINE_H_ALT,10,14,20,160,13
+          !byte LD_LINE_H_ALT,5,17,7,160,13
+          !byte LD_LINE_H_ALT,28,17,7,160,13
+          !byte LD_LINE_H_ALT,10,20,20,160,13
+          !byte LD_OBJECT,19,21,TYPE_PLAYER_DEAN
+          !byte LD_OBJECT,21,21,TYPE_PLAYER_SAM
+          !byte LD_OBJECT,15,5,TYPE_EYE
+          !byte LD_OBJECT,20,5,TYPE_EYE
+          !byte LD_OBJECT,25,5,TYPE_EYE  
+          !byte LD_OBJECT,17,9,TYPE_EYE  
+          !byte LD_OBJECT,23,9,TYPE_EYE  
+          !byte LD_END
+
+
 LEVEL_BORDER_DATA
-          !byte LD_LINE_H_ALT,0,0,40,128,9
-          !byte LD_LINE_H_ALT,1,22,38,128,9
-          !byte LD_LINE_V_ALT,0,1,22,128,9
-          !byte LD_LINE_V_ALT,39,1,22,128,9
+          !byte LD_LINE_H_ALT,0,0,40,192,9
+          !byte LD_LINE_H_ALT,1,22,38,192,9
+          !byte LD_LINE_V_ALT,0,1,22,192,9
+          !byte LD_LINE_V_ALT,39,1,22,192,9
           !byte LD_END
 
 CHARSET
