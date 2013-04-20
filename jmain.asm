@@ -49,7 +49,7 @@ CIA_PRA                 = $dd00
 PROCESSOR_PORT          = $01
 
 ;START_LEVEL             = 0
-START_LEVEL             = 67
+START_LEVEL             = 68
 
 MUSIC_IN_GAME_TUNE		    = $00
 MUSIC_TITLE_TUNE			     = $01
@@ -350,6 +350,7 @@ TYPE_GETREADY           = 30
 TYPE_BOSS4              = 31
 TYPE_BOSS5              = 32
 TYPE_BOSS6              = 33
+TYPE_BOSS7              = 34
 
 OBJECT_HEIGHT           = 8 * 2
 
@@ -1448,7 +1449,15 @@ GameFlowControl
           bne .NoTimedActionYet
           lda #0
           sta DELAYED_GENERIC_COUNTER
+
+          ;final boss intro
+          lda LEVEL_CONFIG
+          and #$08
+          beq ++
           
+          jsr HandleFinalBossIntro
+          jmp .NotDoneYet
+++
           ;level done delay
           lda NUMBER_ENEMIES_ALIVE
           bne .NotDoneYet
@@ -1540,6 +1549,96 @@ GoToNextLevel
           sta VIC_CONTROL_MODE
           rts
 
+
+!zone HandleFinalBossIntro
+HandleFinalBossIntro
+          inc FINAL_INTRO_TIMER_DELAY
+          lda FINAL_INTRO_TIMER_DELAY
+          and #$03
+          beq ++
+          rts
+++          
+          inc FINAL_INTRO_TIMER
+          lda FINAL_INTRO_TIMER
+          
+          cmp #5
+          beq .Flash
+          cmp #8
+          beq .Flash
+          cmp #10
+          beq .Flash
+          cmp #11
+          bne ++
+          
+          ;spawn boss
+          lda #19
+          sta PARAM1
+          lda #6
+          sta PARAM2
+          lda #TYPE_BOSS7
+          sta PARAM3
+          jsr FindEmptySpriteSlot
+          jsr SpawnObject
+
+          ;left arm
+          lda #17
+          sta PARAM1
+          lda #9
+          sta PARAM2
+          lda #TYPE_BOSS3
+          sta PARAM3
+          jsr FindEmptySpriteSlot
+          jsr SpawnObject
+
+          ;right arm
+          lda #21
+          sta PARAM1
+          lda #9
+          sta PARAM2
+          lda #TYPE_BOSS4
+          sta PARAM3
+          jsr FindEmptySpriteSlot
+          jsr SpawnObject
+
+          ;torso
+          lda #19
+          sta PARAM1
+          lda #12
+          sta PARAM2
+          lda #TYPE_BOSS5
+          sta PARAM3
+          jsr FindEmptySpriteSlot
+          jsr SpawnObject
+
+          ;left foot
+          lda #17
+          sta PARAM1
+          lda #15
+          sta PARAM2
+          lda #TYPE_BOSS2
+          sta PARAM3
+          jsr FindEmptySpriteSlot
+          jsr SpawnObject
+
+          ;right foot
+          lda #21
+          sta PARAM1
+          lda #15
+          sta PARAM2
+          lda #TYPE_BOSS
+          sta PARAM3
+          jsr FindEmptySpriteSlot
+          jsr SpawnObject
+          
+.Flash          
+          ;use dean's shot flash
+          lda #5
+          sta PLAYER_RELOAD_FLASH_POS
+          lda #1
+          sta VIC_BACKGROUND_COLOR
+          
+++          
+          rts
 
 ;------------------------------------------------------------
 ;open door animation
@@ -3744,9 +3843,6 @@ SpawnItem
           sbc #ITEM_MAX
           
 .ItemOk          
-
-          lda #ITEM_DEMON_BLOOD
-
           sta ITEM_ACTIVE,y
           sta PARAM1
           
@@ -4809,59 +4905,6 @@ BehaviourBatUD
           rts
           
 
-;------------------------------------------------------------
-;single attacking bat
-;------------------------------------------------------------
-!zone BehaviourBatAttacking
-BehaviourBatAttacking
-          lda DELAYED_GENERIC_COUNTER
-          and #$03
-          bne .NoAnimUpdate
-          
-          inc SPRITE_ANIM_POS,x
-          lda SPRITE_ANIM_POS,x
-          and #$03
-          sta SPRITE_ANIM_POS,x
-          
-          tay
-          lda BAT_ANIMATION,y
-          sta SPRITE_POINTER_BASE,x
-          
-.NoAnimUpdate          
-          lda #3
-          sta PARAM1
-          lda SPRITE_DIRECTION,x
-          beq .MoveRight
-
-.MoveLeft
-          jsr ObjectMoveLeft
-          dec PARAM1
-          bne .MoveLeft
-          jmp .XMoveDone
-          
-.MoveRight
-          jsr ObjectMoveRight
-          dec PARAM1
-          bne .MoveRight
-          
-.XMoveDone
-          lda SPRITE_CHAR_POS_X,x
-          cmp #255
-          beq .RemoveMe
-          cmp #39
-          beq .RemoveMe
-          rts
-          
-.RemoveMe
-          inc SPAWN_NO_ITEM
-          jsr KillEnemy
-          dec SPAWN_NO_ITEM
-          rts
-          
- 
-
- 
-          
  
 ;place the data at a valid bitmap position, this avoids copying the data        
 * = $2000        
@@ -5114,6 +5157,55 @@ SCREEN_BACK_LINE_OFFSET_TABLE_HI
 MUSIC_PLAYER
 !binary "music.bin",,2
 
+
+;------------------------------------------------------------
+;single attacking bat
+;------------------------------------------------------------
+!zone BehaviourBatAttacking
+BehaviourBatAttacking
+          lda DELAYED_GENERIC_COUNTER
+          and #$03
+          bne .NoAnimUpdate
+          
+          inc SPRITE_ANIM_POS,x
+          lda SPRITE_ANIM_POS,x
+          and #$03
+          sta SPRITE_ANIM_POS,x
+          
+          tay
+          lda BAT_ANIMATION,y
+          sta SPRITE_POINTER_BASE,x
+          
+.NoAnimUpdate          
+          lda #3
+          sta PARAM1
+          lda SPRITE_DIRECTION,x
+          beq .MoveRight
+
+.MoveLeft
+          jsr ObjectMoveLeft
+          dec PARAM1
+          bne .MoveLeft
+          jmp .XMoveDone
+          
+.MoveRight
+          jsr ObjectMoveRight
+          dec PARAM1
+          bne .MoveRight
+          
+.XMoveDone
+          lda SPRITE_CHAR_POS_X,x
+          cmp #255
+          beq .RemoveMe
+          cmp #39
+          beq .RemoveMe
+          rts
+          
+.RemoveMe
+          inc SPAWN_NO_ITEM
+          jsr KillEnemy
+          dec SPAWN_NO_ITEM
+          rts
 
 ;------------------------------------------------------------
 ;simply walk left/right, don't fall off
@@ -9466,6 +9558,15 @@ BOSS_MOVE_SPEED = 1
 
 
 ;------------------------------------------------------------
+;boss #7
+;------------------------------------------------------------
+!zone BehaviourBoss7
+BehaviourBoss7
+BOSS_MOVE_SPEED = 1
+          rts
+
+
+;------------------------------------------------------------
 ;explosion
 ;------------------------------------------------------------
 !zone BehaviourExplosion
@@ -10007,6 +10108,9 @@ ResetObjects
           sta NUMBER_DELAYED_SPAWN_SPOTS_ALIVE
           sta NUMBER_SPAWNS_ALIVE
           sta SPAWN_SPOT_LEVEL
+          sta FINAL_INTRO_TIMER
+          sta FINAL_INTRO_TIMER_DELAY
+
 .ClearObjectLoop
           sta SPRITE_ACTIVE,x
           sta SPRITE_FALLING,x
@@ -12058,6 +12162,7 @@ ENEMY_BEHAVIOUR_TABLE_LO
           !byte <BehaviourBoss4
           !byte <BehaviourBoss5
           !byte <BehaviourBoss6
+          !byte <BehaviourBoss7
           
 ENEMY_BEHAVIOUR_TABLE_HI
           !byte >PlayerControl
@@ -12093,6 +12198,7 @@ ENEMY_BEHAVIOUR_TABLE_HI
           !byte >BehaviourBoss4
           !byte >BehaviourBoss5
           !byte >BehaviourBoss6
+          !byte >BehaviourBoss7
           
 ;behaviour for an enemy being hit          
 ENEMY_HIT_BEHAVIOUR_TABLE_LO          
@@ -12128,6 +12234,7 @@ ENEMY_HIT_BEHAVIOUR_TABLE_LO
           !byte <HitBehaviourHurt     ;boss 4
           !byte <HitBehaviourHurt     ;boss 5
           !byte <HitBehaviourHurt     ;boss 6
+          !byte <HitBehaviourHurt     ;boss 7
           
           
 ENEMY_HIT_BEHAVIOUR_TABLE_HI
@@ -12163,6 +12270,7 @@ ENEMY_HIT_BEHAVIOUR_TABLE_HI
           !byte >HitBehaviourHurt     ;boss 4
           !byte >HitBehaviourHurt     ;boss 5
           !byte >HitBehaviourHurt     ;boss 6
+          !byte >HitBehaviourHurt     ;boss 7
           
 IS_TYPE_ENEMY
           !byte 0     ;dummy entry for inactive object
@@ -12199,6 +12307,7 @@ IS_TYPE_ENEMY
           !byte 1     ;boss4
           !byte 1     ;boss5
           !byte 1     ;boss6
+          !byte 1     ;boss7
           
 TYPE_START_SPRITE
           !byte 0     ;dummy entry for inactive object
@@ -12235,6 +12344,7 @@ TYPE_START_SPRITE
           !byte SPRITE_BOSS_ARM_R
           !byte SPRITE_BOSS_TORSO_L
           !byte SPRITE_BOSS_TORSO_R
+          !byte SPRITE_BOSS_HEAD
           
 TYPE_START_COLOR
           !byte 0
@@ -12271,6 +12381,7 @@ TYPE_START_COLOR
           !byte 0     ;boss4
           !byte 1     ;boss5
           !byte 1     ;boss6
+          !byte 0     ;boss7
           
 TYPE_START_MULTICOLOR
           !byte 0     ;dummy
@@ -12307,6 +12418,7 @@ TYPE_START_MULTICOLOR
           !byte 0     ;boss4
           !byte 0     ;boss5
           !byte 0     ;boss6
+          !byte 0     ;boss7
           
 TYPE_START_HP
           !byte 0     ;dummy
@@ -12343,6 +12455,7 @@ TYPE_START_HP
           !byte 10    ;boss4
           !byte 10    ;boss5
           !byte 10    ;boss6
+          !byte 25    ;boss7
           
 TYPE_ANNOYED_COLOR
           !byte 0     ;dummy
@@ -12379,6 +12492,7 @@ TYPE_ANNOYED_COLOR
           !byte 0     ;boss4
           !byte 1     ;boss5
           !byte 1     ;boss6
+          !byte 0     ;boss7
           
           
 ;enemy start direction, 2 bits per dir.
@@ -12431,6 +12545,7 @@ TYPE_START_DIRECTION
           !byte %00001010     ;boss4
           !byte %00001010     ;boss5
           !byte %00001010     ;boss6
+          !byte %00001010     ;boss7
           
 TYPE_START_STATE
           !byte 0             ;dummy
@@ -12467,6 +12582,7 @@ TYPE_START_STATE
           !byte 0             ;boss4
           !byte 0             ;boss5
           !byte 128           ;boss6
+          !byte 0             ;boss7
           
 TYPE_START_DELTA_Y
           !byte 0     ;dummy
@@ -12503,6 +12619,7 @@ TYPE_START_DELTA_Y
           !byte 0     ;boss4
           !byte 0     ;boss5
           !byte 0     ;boss6
+          !byte 0     ;boss7
           
 BAT_ANIMATION
           !byte SPRITE_BAT_1
@@ -12930,6 +13047,13 @@ ANIM_TILE2_BYTES
           !byte 0,0,0,0,0,0,0,0
           !byte 0,0,0,0,0,0,0,0
 ANIM_POS
+          !byte 0
+          
+FINAL_INTRO_TIMER
+          !byte 0
+FINAL_INTRO_TIMER_DELAY
+          !byte 0
+FINAL_INTRO_FLASH
           !byte 0
           
 !source "level_data.asm"

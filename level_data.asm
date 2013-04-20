@@ -447,7 +447,9 @@ SN_SCREEN_DATA_TABLE
           !word SN_LEVEL_67
           !word SN_LEVEL_68
           !word SN_LEVEL_69
-          !word SN_LEVEL_70
+          ;!word SN_LEVEL_70
+          !word SN_LEVEL_71
+          !word SN_LEVEL_72
           !word 0
 
 
@@ -2346,6 +2348,72 @@ SN_LEVEL_68
           !byte LD_SPAWN_SPOT,26,9,TYPE_ZOMBIE,34
           !byte LD_END
 SN_LEVEL_69
+          !byte LD_LEVEL_CONFIG,7
+          !byte LD_AREA,8,2,24,19,93,6
+          !byte LD_LINE_H,8,1,24,92,6
+          !byte LD_ELEMENT_LINE_H,6,0,7,EL_SN_BLUEROCK
+          !byte LD_ELEMENT_LINE_H,6,21,7,EL_SN_BLUEROCK
+          !byte LD_ELEMENT_LINE_V,6,2,19,EL_SN_METAL.COLUMN.L.CENTER
+          !byte LD_ELEMENT,6,1,EL_SN_METAL.COLUMN.L.TOP
+          !byte LD_ELEMENT,6,6,EL_SN_METAL.COLUMN.L.HOLE
+          !byte LD_ELEMENT,6,141
+          !byte LD_ELEMENT,32,1,EL_SN_METAL.COLUMN.R.TOP
+          !byte LD_ELEMENT_LINE_V,32,2,19,EL_SN_METAL.COLUMN.R.CENTER
+          !byte LD_ELEMENT,32,6,EL_SN_METAL.COLUMN.R.BOTTOM
+          !byte LD_ELEMENT,32,141
+          !byte LD_ELEMENT_LINE_V,16,11,2,EL_SN_METAL.DOOR.L
+          !byte LD_ELEMENT_LINE_V,20,11,2,EL_SN_METAL.DOOR.L
+          !byte LD_ELEMENT_LINE_V,18,11,2,EL_SN_METAL.DOOR.R
+          !byte LD_ELEMENT_LINE_V,22,11,2,EL_SN_METAL.DOOR.R
+          !byte LD_ELEMENT,10,9,EL_SN_SLIME_STONE_4
+          !byte LD_ELEMENT,26,137
+          !byte LD_ELEMENT,11,12,EL_SN_SLIME_STONE_2
+          !byte LD_ELEMENT,11,143
+          !byte LD_ELEMENT,11,146
+          !byte LD_ELEMENT,27,146
+          !byte LD_ELEMENT,27,143
+          !byte LD_ELEMENT,27,140
+          !byte LD_OBJECT,12,17,TYPE_PLAYER_DEAN
+          !byte LD_OBJECT,27,17,TYPE_PLAYER_SAM
+          !byte LD_SPAWN_SPOT,9,20,TYPE_ZOMBIE,2
+          !byte LD_SPAWN_SPOT,30,20,TYPE_ZOMBIE,2
+          !byte LD_SPAWN_SPOT,20,14,TYPE_BAT_VANISH,2
+          !byte LD_SPAWN_SPOT,11,8,TYPE_SPIDER,18
+          !byte LD_SPAWN_SPOT,28,8,TYPE_SPIDER,18
+          !byte LD_SPAWN_SPOT,11,14,TYPE_WOLFMAN,33
+          !byte LD_SPAWN_SPOT,28,14,TYPE_WOLFMAN,33
+          !byte LD_END
+SN_LEVEL_70
+          !byte LD_LEVEL_CONFIG,11
+          !byte LD_ELEMENT_AREA,13,1,7,5,EL_SN_RED_ROCK_BACKGROUND
+          !byte LD_ELEMENT_AREA,3,5,7,4,EL_SN_RED_ROCK_BACKGROUND
+          !byte LD_ELEMENT_AREA,23,5,7,4,EL_SN_RED_ROCK_BACKGROUND
+          !byte LD_ELEMENT_LINE_H,0,21,10,EL_SN_REDROCK
+          !byte LD_ELEMENT_LINE_V,0,5,16,EL_SN_METAL.COLUMN.L.CENTER
+          !byte LD_ELEMENT_LINE_V,38,5,16,EL_SN_METAL.COLUMN.R.CENTER
+          !byte LD_ELEMENT,0,9,EL_SN_METAL.COLUMN.L.HOLE
+          !byte LD_ELEMENT,0,143
+          !byte LD_ELEMENT,38,9,EL_SN_METAL.COLUMN.R.BOTTOM
+          !byte LD_ELEMENT_LINE_H,0,4,2,EL_SN_REDROCK
+          !byte LD_ELEMENT,38,15,EL_SN_METAL.COLUMN.R.BOTTOM
+          !byte LD_ELEMENT_LINE_H,32,4,2,EL_SN_REDROCK
+          !byte LD_ELEMENT_LINE_V,10,1,4,EL_SN_METAL.COLUMN.L.CENTER
+          !byte LD_ELEMENT_LINE_V,28,1,4,EL_SN_METAL.COLUMN.R.CENTER
+          !byte LD_ELEMENT,28,2,EL_SN_METAL.COLUMN.R.BOTTOM
+          !byte LD_ELEMENT,10,2,EL_SN_METAL.COLUMN.L.HOLE
+          !byte LD_ELEMENT_LINE_V,30,1,4,EL_SN_METAL.COLUMN.L.CENTER
+          !byte LD_ELEMENT_LINE_V,8,1,4,EL_SN_METAL.COLUMN.R.CENTER
+          !byte LD_ELEMENT,8,2,EL_SN_METAL.COLUMN.R.BOTTOM
+          !byte LD_ELEMENT,30,2,EL_SN_METAL.COLUMN.L.HOLE
+          !byte LD_ELEMENT_LINE_H,8,0,6,EL_SN_REDROCK
+          !byte LD_OBJECT,6,20,TYPE_PLAYER_DEAN
+          !byte LD_OBJECT,33,20,TYPE_PLAYER_SAM
+          !byte LD_ELEMENT,8,18,EL_SN_SAND_STONE_4
+          !byte LD_ELEMENT,28,146
+          !byte LD_ELEMENT,31,143
+          !byte LD_ELEMENT,5,143
+          !byte LD_END
+SN_LEVEL_71
           !byte LD_LINE_H_ALT,1,20,38,160,13
           !byte LD_LINE_H_ALT,1,11,4,160,13
           !byte LD_LINE_H_ALT,1,14,4,160,13
@@ -2361,7 +2429,7 @@ SN_LEVEL_69
           !byte LD_LINE_H_ALT,1,5,4,160,13
           !byte LD_LINE_H_ALT,35,5,4,160,13
           !byte LD_END
-SN_LEVEL_70
+SN_LEVEL_72
           !byte LD_LEVEL_CONFIG,2
           !byte LD_ELEMENT,6,16,EL_SN_REDROCK
           !byte LD_OBJECT,8,15,TYPE_PLAYER_DEAN
