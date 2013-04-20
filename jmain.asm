@@ -1034,7 +1034,19 @@ GameLoop
 
           ;inc 53280
           jsr ObjectControl
+ 
+          ;shot flash
+          lda PLAYER_RELOAD_FLASH_POS
+          beq +
           
+          dec PLAYER_RELOAD_FLASH_POS
+          lda VIC_BACKGROUND_COLOR
+          and #$0f
+          tay
+          lda COLOR_FADE_OUT_TABLE,y
+          sta VIC_BACKGROUND_COLOR
+          
++          
           ;check for Dean
           lda GAME_MODE
           cmp #GT_SINGLE_PLAYER_SAM
@@ -2790,6 +2802,11 @@ FireShot
           lda #6
           sta SCREEN_COLOR + 23 * 40 + 19,y
           sta SCREEN_COLOR + 24 * 40 + 19,y
+          
+          lda #5
+          sta PLAYER_RELOAD_FLASH_POS
+          lda #1
+          sta VIC_BACKGROUND_COLOR
           
           ;frame delay until next shot
           lda #20
@@ -10673,6 +10690,8 @@ PLAYER_STAND_STILL_TIME
           !byte 0,0
 PLAYER_RELOAD_SPEED
           !byte 0
+PLAYER_RELOAD_FLASH_POS
+          !byte 0
 RELOAD_SPEED
           !byte 1,1,1,1,1
 RELOAD_SPEED_MAX
@@ -10683,6 +10702,11 @@ PLAYER_JOYSTICK_PORT
           !byte 0,1
 PLAYER_FORCE_RANGE
           !byte 5
+
+COLOR_FADE_IN_TABLE
+          !byte 11,1,10,1,10,13,14,1,7,8,1,12,15,1,1,1
+COLOR_FADE_OUT_TABLE
+          !byte 0,15,9,14,6,6,11,10,9,11,2,0,11,5,6,12
 
 SPRITE_HP
           !byte 0,0,0,0,0,0,0,0
