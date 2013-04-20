@@ -48,7 +48,8 @@ CIA_PRA                 = $dd00
 
 PROCESSOR_PORT          = $01
 
-START_LEVEL             = 0
+;START_LEVEL             = 0
+START_LEVEL             = 67
 
 MUSIC_IN_GAME_TUNE		    = $00
 MUSIC_TITLE_TUNE			     = $01
@@ -367,7 +368,7 @@ ITEM_NONE               = 255
 ITEM_COUNT              = 8
 
 ;number of possible spawn spots
-SPAWN_SPOT_COUNT        = 8
+SPAWN_SPOT_COUNT        = 10
 
 ;game mode types
 GT_SINGLE_PLAYER_DEAN   = 0
@@ -1035,6 +1036,9 @@ GameLoop
           CMP #49
           bne .NOCHEAT
           
+          ;jsr StartLevel
+          jsr GoToNextLevel
+!if 0 {          
           ;jump to next level
           lda #$0b
           sta VIC_CONTROL_MODE
@@ -1048,6 +1052,7 @@ GameLoop
           jsr DisplayGetReady
           lda #$1b
           sta VIC_CONTROL_MODE
+}
           
 .NOCHEAT
 
@@ -1757,6 +1762,8 @@ StartLevel
           ;reset variables
           lda #0
           sta NUMBER_ENEMIES_ALIVE
+          sta NUMBER_SPAWN_SPOTS_ALIVE
+          sta NUMBER_SPAWNS_ALIVE
           sta LEVEL_DONE_DELAY
           sta SPRITE_POS_X_EXTEND
           sta PLAYER_STAND_STILL_TIME
