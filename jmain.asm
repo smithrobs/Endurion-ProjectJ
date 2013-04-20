@@ -3,9 +3,9 @@
 
 ;memory layout
 
-;screen             $CC00 to $CFFF
+;screen back color  $C400 to $C7FF
 ;screen back char   $C800 to $CBFF
-;screen back colro  $C400 to $C7FF
+;screen             $CC00 to $CFFF
 ;sprites            $D000 to $EFFF
 ;charset            $F000 to $F800
 
@@ -80,7 +80,7 @@ SCREEN_BACK_COLOR       = $C400
 SPRITE_POINTER_BASE     = SCREEN_CHAR + 1016
 
 ;number of sprites divided by four
-NUMBER_OF_SPRITES_DIV_4       = 136 / 4
+NUMBER_OF_SPRITES_DIV_4       = 140 / 4
 
 ;sprite number constant
 SPRITE_BASE                   = 64
@@ -250,6 +250,11 @@ SPRITE_DEBRIS_2               = SPRITE_BASE + 133
 SPRITE_SPAWN_1                = SPRITE_BASE + 134
 SPRITE_SPAWN_2                = SPRITE_BASE + 135
 
+SPRITE_BOSS_R_1               = SPRITE_BASE + 136
+SPRITE_BOSS_R_2               = SPRITE_BASE + 137
+SPRITE_BOSS_L_1               = SPRITE_BASE + 138
+SPRITE_BOSS_L_2               = SPRITE_BASE + 139
+
 ;offset from calculated char pos to true sprite pos
 SPRITE_CENTER_OFFSET_X  = 8
 SPRITE_CENTER_OFFSET_Y  = 11
@@ -310,6 +315,7 @@ TYPE_IMPALA_3           = 23
 TYPE_IMPALA_DRIVER      = 24
 TYPE_IMPALA_DEBRIS      = 25
 TYPE_SPAWN              = 26
+TYPE_BOSS               = 27
 
 OBJECT_HEIGHT           = 8 * 2
 
@@ -333,6 +339,11 @@ SPAWN_SPOT_COUNT        = 8
 GT_SINGLE_PLAYER_DEAN   = 0
 GT_SINGLE_PLAYER_SAM    = 1
 GT_COOP                 = 2
+
+BEAM_TYPE_DARK          = 0
+BEAM_TYPE_MEDIUM        = 1
+BEAM_TYPE_LIGHT         = 2
+BEAM_TYPE_LIGHT2        = 3
 
 ;this creates a basic start
 *=$0801
@@ -672,6 +683,7 @@ TitleScreenWithoutIRQ
           jsr ReleaseTitleIRQ
 
           lda #0
+          sta CHAPTER
           jsr ShowStory
 
           ;game start values
@@ -783,10 +795,12 @@ ShowStory
           ldy #1
           jsr ClearScreen
           
-          lda #<TEXT_STORY_1
+          ldy CHAPTER
+          lda CHAPTER_PAGES_LO,y
           sta ZEROPAGE_POINTER_1
-          lda #>TEXT_STORY_1
+          lda CHAPTER_PAGES_HI,y
           sta ZEROPAGE_POINTER_1 + 1
+          
           lda #1
           sta PARAM1
           lda #1
@@ -843,16 +857,6 @@ ShowStory
           jsr WaitFrame
          
           jsr ObjectControl
-          ;ldx #0
-          ;jsr MoveSpriteLeft
-          ;inx
-          ;jsr MoveSpriteLeft
-          ;inx
-          ;jsr MoveSpriteLeft
-          ;inx
-          ;jsr MoveSpriteLeft
-          ;inx
-          ;jsr MoveSpriteLeft
           
           lda #$10
           bit JOYSTICK_PORT_II
@@ -1896,7 +1900,6 @@ PlayerControl
           
 .NotInvincible          
           ;check if the player collected an item
-          ldy #0
 .ItemLoop
           lda ITEM_ACTIVE,y
           cmp #ITEM_NONE
@@ -6513,6 +6516,529 @@ BehaviourSpawn
           jsr SpawnObject
           ldx PARAM7
           rts
+
+
+
+;------------------------------------------------------------
+;check player vs. beam
+; beam boss index in x
+; player index in y
+;------------------------------------------------------------
+!zone CheckIsPlayerCollidingWithBeam
+CheckIsPlayerCollidingWithBeam
+          lda SPRITE_ACTIVE,y
+          bne .PlayerIsActive
+.PlayerNotActive          
+          rts
+          
+.PlayerIsActive          
+          lda SPRITE_STATE,y
+          cmp #128
+          bcs .PlayerNotActive
+          
+          ;compare char positions in x
+          lda SPRITE_CHAR_POS_X,x
+          cmp SPRITE_CHAR_POS_X,y
+          beq .PlayerHit
+          
+          clc
+          adc #1
+          cmp SPRITE_CHAR_POS_X,y
+          beq .PlayerHit
+          
+          sec
+          sbc #2
+          cmp SPRITE_CHAR_POS_X,y
+          beq .PlayerHit
+          
+          ;compare char positions in y
+          lda SPRITE_CHAR_POS_Y,x
+          cmp SPRITE_CHAR_POS_Y,y
+          beq .PlayerHit
+          
+          clc
+          adc #1
+          cmp SPRITE_CHAR_POS_Y,y
+          beq .PlayerHit
+          
+          sec
+          sbc #2
+          cmp SPRITE_CHAR_POS_Y,y
+          beq .PlayerHit
+          
+          ;not hit
+          rts
+          
+.PlayerHit          
+          ;player killed
+          lda #129
+          sta SPRITE_STATE,y
+          
+          lda #SPRITE_PLAYER_DEAD
+          sta SPRITE_POINTER_BASE,y
+          
+          lda #0
+          sta SPRITE_MOVE_POS,y
+          
+          lda SPRITE_ACTIVE,y
+          cmp #TYPE_PLAYER_SAM
+          bne .PlayerWasDean
+          
+          ;reset Sam specific variables
+          lda #0
+          sta SPRITE_HELD
+          
+.PlayerWasDean          
+          rts
+
+;------------------------------------------------------------
+;boss
+;------------------------------------------------------------
+!zone BehaviourBoss
+BehaviourBoss
+          
+BOSS_MOVE_SPEED = 1
+          lda SPRITE_HITBACK,x
+          beq .NoHitBack
+
+          dec SPRITE_HITBACK,x
+          
+          ldy SPRITE_HITBACK,x
+          lda BOSS_FLASH_TABLE,y
+          sta VIC_SPRITE_COLOR,x
+          
+          cpy #0
+          bne .NoHitBack
+          
+          ;make vulnerable again
+          lda SPRITE_STATE,x
+          cmp #128
+          bne .NoHitBack
+          
+          lda #0
+          sta SPRITE_STATE,x
+        
+.NoHitBack        
+          lda DELAYED_GENERIC_COUNTER
+          and #$03
+          bne .NoAnimUpdate
+          
+          lda SPRITE_POINTER_BASE,x
+          eor #$01
+          sta SPRITE_POINTER_BASE,x
+          
+.NoAnimUpdate     
+          lda SPRITE_STATE,x
+          and #$7f
+          bne .NotFollowPlayer
+          jmp .FollowPlayer
+          
+.NotFollowPlayer          
+          cmp #1
+          beq .AttackMode
+          rts
+          
+.AttackMode          
+          ;Attack modes (more modes?)
+          inc SPRITE_MOVE_POS,x
+          lda SPRITE_MOVE_POS,x
+          cmp #4
+          beq .NextAttackStep
+          rts
+          
+.NextAttackStep
+          lda #0
+          sta SPRITE_MOVE_POS,x
+
+          inc SPRITE_MODE_POS,x
+          
+          lda SPRITE_MODE_POS,x
+          cmp #11
+          bcc .BeamNotDangerous
+          cmp #29
+          bcs .BeamNotDangerous
+          
+          ;does player hit beam?
+          ldy #0
+          jsr CheckIsPlayerCollidingWithBeam
+          ldy #1
+          jsr CheckIsPlayerCollidingWithBeam
+          
+.BeamNotDangerous          
+          lda SPRITE_MODE_POS,x
+          cmp #11
+          beq .BeamStep1
+          cmp #12
+          beq .BeamStep2
+          cmp #13
+          beq .BeamStep3
+          cmp #16
+          beq .BeamStep4
+          cmp #17
+          beq .BeamStep3
+          cmp #18
+          beq .BeamStep4
+          cmp #19
+          beq .BeamStep3
+          cmp #20
+          beq .BeamStep4
+          cmp #21
+          beq .BeamStep3
+          cmp #22
+          beq .BeamStep4
+          cmp #23
+          beq .BeamStep3
+          cmp #24
+          beq .BeamStep4
+          cmp #25
+          beq .BeamStep3
+          cmp #26
+          beq .BeamStep4
+          cmp #27
+          beq .BeamStep3
+          cmp #28
+          beq .BeamStep4
+          cmp #29
+          beq .BeamStep3
+          cmp #30
+          beq .BeamEnd
+          rts
+          
+.BeamStep1
+          ;beam
+          lda #BEAM_TYPE_DARK
+          jsr .DrawBeam
+          rts
+          
+.BeamStep2
+          ;beam
+          lda #BEAM_TYPE_MEDIUM
+          jsr .DrawBeam
+          rts
+          
+.BeamStep3
+          ;beam
+          lda #BEAM_TYPE_LIGHT
+          jsr .DrawBeam
+          rts
+          
+.BeamStep4
+          ;beam
+          lda #BEAM_TYPE_LIGHT2
+          jsr .DrawBeam
+          rts
+          
+.BeamEnd
+          jsr .RestoreBeam
+          
+          lda #0
+          sta SPRITE_STATE,x
+          rts
+          
+.DrawBeam
+          tay
+          lda BEAM_CHAR_H,y
+          sta PARAM1
+          lda BEAM_CHAR_V,y
+          sta PARAM2
+          lda BEAM_COLOR,y
+          sta PARAM3
+          
+          ldy SPRITE_CHAR_POS_Y,x
+          
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          sta ZEROPAGE_POINTER_2
+          lda SCREEN_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+          clc
+          adc #( ( SCREEN_COLOR - SCREEN_CHAR ) >> 8 )
+          sta ZEROPAGE_POINTER_2 + 1
+          
+          stx PARAM6
+          
+          ldy #1
+.HLoop          
+          lda PARAM1
+          sta (ZEROPAGE_POINTER_1),y
+          lda PARAM3
+          sta (ZEROPAGE_POINTER_2),y
+          iny
+          cpy #39
+          bne .HLoop
+
+          ;vertical beam
+          ldy SPRITE_CHAR_POS_X,x
+          ldx #1
+          
+.NextLine          
+          lda SCREEN_LINE_OFFSET_TABLE_LO,x
+          sta ZEROPAGE_POINTER_1
+          sta ZEROPAGE_POINTER_2
+          lda SCREEN_LINE_OFFSET_TABLE_HI,x
+          sta ZEROPAGE_POINTER_1 + 1
+          clc
+          adc #( ( SCREEN_COLOR - SCREEN_CHAR ) >> 8 )
+          sta ZEROPAGE_POINTER_2 + 1
+          
+          lda PARAM2
+          sta (ZEROPAGE_POINTER_1),y
+          lda PARAM3
+          sta (ZEROPAGE_POINTER_2),y
+          
+          inx
+          cpx #22
+          bne .NextLine
+
+          ldx PARAM6
+          rts
+          
+
+.RestoreBeam
+          ldy SPRITE_CHAR_POS_Y,x
+          
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          sta ZEROPAGE_POINTER_2
+          sta ZEROPAGE_POINTER_3
+          sta ZEROPAGE_POINTER_4
+          lda SCREEN_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+          sec
+          sbc #( ( SCREEN_CHAR - SCREEN_BACK_CHAR ) >> 8 )
+          sta ZEROPAGE_POINTER_2 + 1
+          clc
+          adc #( ( SCREEN_COLOR - SCREEN_BACK_CHAR ) >> 8 )
+          sta ZEROPAGE_POINTER_3 + 1
+          sec
+          sbc #( ( SCREEN_COLOR - SCREEN_BACK_COLOR ) >> 8 )
+          sta ZEROPAGE_POINTER_4 + 1
+          
+          stx PARAM6
+          
+          ldy #1
+          
+-
+          lda (ZEROPAGE_POINTER_2),y
+          sta (ZEROPAGE_POINTER_1),y
+          lda (ZEROPAGE_POINTER_4),y
+          sta (ZEROPAGE_POINTER_3),y
+          iny
+          cpy #39
+          bne -
+
+          ;vertical beam
+          ldy SPRITE_CHAR_POS_X,x
+          ldx #1
+          
+.NextLineR          
+          lda SCREEN_LINE_OFFSET_TABLE_LO,x
+          sta ZEROPAGE_POINTER_1
+          sta ZEROPAGE_POINTER_2
+          sta ZEROPAGE_POINTER_3
+          sta ZEROPAGE_POINTER_4
+          lda SCREEN_LINE_OFFSET_TABLE_HI,x
+          sta ZEROPAGE_POINTER_1 + 1
+          clc
+          adc #( ( SCREEN_BACK_CHAR - SCREEN_CHAR ) >> 8 )
+          sta ZEROPAGE_POINTER_2 + 1
+          clc
+          adc #( ( SCREEN_COLOR - SCREEN_BACK_CHAR ) >> 8 )
+          sta ZEROPAGE_POINTER_3 + 1
+          sec
+          sbc #( ( SCREEN_COLOR - SCREEN_BACK_COLOR ) >> 8 )
+          sta ZEROPAGE_POINTER_4 + 1
+
+          lda (ZEROPAGE_POINTER_2),y
+          sta (ZEROPAGE_POINTER_1),y
+          lda (ZEROPAGE_POINTER_4),y
+          sta (ZEROPAGE_POINTER_3),y
+          
+          inx
+          cpx #22
+          bne .NextLineR
+
+          ldx PARAM6
+          rts
+          
+.FollowPlayer          
+          inc SPRITE_ANIM_DELAY,x
+          lda SPRITE_ANIM_DELAY,x
+          cmp #10
+          beq .DoCheckMove
+          jmp .DoGhostMove
+
+.DoCheckMove
+          lda #0
+          sta SPRITE_ANIM_DELAY,x
+          
+          txa
+          and #$01
+          tay
+          lda SPRITE_ACTIVE,y
+          cmp #TYPE_PLAYER_DEAN
+          beq .FoundPlayer
+          cmp #TYPE_PLAYER_SAM
+          beq .FoundPlayer
+          
+          ;check other player
+          tya
+          eor #1
+          tay
+          lda SPRITE_ACTIVE,y
+          cmp #TYPE_PLAYER_DEAN
+          beq .FoundPlayer
+          cmp #TYPE_PLAYER_SAM
+          beq .FoundPlayer
+          
+          ;no player to hunt
+          rts
+          
+.FoundPlayer
+          ;player index in y
+          lda SPRITE_CHAR_POS_X,y
+          cmp SPRITE_CHAR_POS_X,x
+          bpl .MoveRight
+          
+          ;move left
+          lda SPRITE_DIRECTION,x
+          bne .AlreadyLookingLeft
+          lda SPRITE_MOVE_POS,x
+          beq .TurnLNow
+          dec SPRITE_MOVE_POS,x
+          bne .CheckYNow
+          
+.TurnLNow          
+          ;turning now
+          lda #1
+          sta SPRITE_DIRECTION,x
+          lda #SPRITE_BOSS_L_1
+          sta SPRITE_POINTER_BASE,x
+          jmp .CheckYNow
+          
+.AlreadyLookingLeft
+          lda SPRITE_MOVE_POS,x
+          cmp #BOSS_MOVE_SPEED
+          beq .CheckYNow
+          inc SPRITE_MOVE_POS,x
+          jmp .CheckYNow
+          
+.MoveRight   
+          lda SPRITE_DIRECTION,x
+          beq .AlreadyLookingRight
+          
+          lda SPRITE_MOVE_POS,x
+          beq .TurnRNow
+          dec SPRITE_MOVE_POS,x
+          bne .CheckYNow
+          
+          ;turning now
+.TurnRNow          
+          lda #0
+          sta SPRITE_DIRECTION,x
+          lda #SPRITE_BOSS_R_1
+          sta SPRITE_POINTER_BASE,x
+          jmp .CheckYNow
+          
+.AlreadyLookingRight          
+          lda SPRITE_MOVE_POS,x
+          cmp #BOSS_MOVE_SPEED
+          beq .CheckYNow
+          inc SPRITE_MOVE_POS,x
+          jmp .CheckYNow
+          
+.CheckYNow
+          ;player index in y
+          lda SPRITE_CHAR_POS_Y,y
+          cmp SPRITE_CHAR_POS_Y,x
+          bpl .MoveDown
+          
+          ;move left
+          lda SPRITE_DIRECTION_Y,x
+          bne .AlreadyLookingUp
+          lda SPRITE_MOVE_POS_Y,x
+          beq .TurnUNow
+          dec SPRITE_MOVE_POS_Y,x
+          bne .DoGhostMove
+          
+.TurnUNow          
+          ;turning now
+          lda #1
+          sta SPRITE_DIRECTION_Y,x
+          jmp .DoGhostMove
+          
+.AlreadyLookingUp
+          lda SPRITE_MOVE_POS_Y,x
+          cmp #BOSS_MOVE_SPEED
+          beq .DoGhostMove
+          inc SPRITE_MOVE_POS_Y,x
+          jmp .DoGhostMove
+          
+.MoveDown
+          lda SPRITE_DIRECTION_Y,x
+          beq .AlreadyLookingDown
+          
+          lda SPRITE_MOVE_POS_Y,x
+          beq .TurnDNow
+          dec SPRITE_MOVE_POS_Y,x
+          bne .DoGhostMove
+          
+          ;turning now
+.TurnDNow          
+          lda #0
+          sta SPRITE_DIRECTION_Y,x
+          jmp .DoGhostMove
+          
+.AlreadyLookingDown
+          lda SPRITE_MOVE_POS_Y,x
+          cmp #BOSS_MOVE_SPEED
+          beq .DoGhostMove
+          inc SPRITE_MOVE_POS_Y,x
+          jmp .DoGhostMove
+
+.DoGhostMove
+          ;move X times
+          ldy SPRITE_MOVE_POS,x
+          sty PARAM4
+          beq .DoY
+          
+          lda SPRITE_DIRECTION,x
+          beq .DoRight
+.MoveLoopL
+          jsr ObjectMoveLeftBlocking
+          dec PARAM4
+          bne .MoveLoopL
+          jmp .DoY
+          
+.DoRight
+.MoveLoopR
+          jsr ObjectMoveRightBlocking
+          dec PARAM4
+          bne .MoveLoopR
+          
+.DoY          
+          ;move X times
+          ldy SPRITE_MOVE_POS_Y,x
+          sty PARAM4
+          beq .MoveDone
+          
+          lda SPRITE_DIRECTION_Y,x
+          beq .DoDown
+.MoveLoopU
+          jsr ObjectMoveUpBlocking
+          dec PARAM4
+          bne .MoveLoopU
+          jmp .MoveDone
+          
+.DoDown
+.MoveLoopD
+          jsr ObjectMoveDownBlockingNoPlatform
+          dec PARAM4
+          bne .MoveLoopD
+         
+.MoveDone         
+          rts
+          
  
 ;------------------------------------------------------------
 ;explosion
@@ -6618,6 +7144,36 @@ HitBehaviourHurt
           ldy SPRITE_ACTIVE,x
           lda TYPE_ANNOYED_COLOR,y
           sta VIC_SPRITE_COLOR,x
+          rts
+          
+ 
+;------------------------------------------------------------
+;hit behaviour for boss
+;------------------------------------------------------------
+!zone HitBehaviourBoss
+HitBehaviourBoss
+          lda #8
+          sta SPRITE_HITBACK,x
+          
+          ;make invincible for a short while
+          lda SPRITE_STATE,x
+          ora #$80
+          sta SPRITE_STATE,x
+          
+          ;boss switches tactic
+          lda SPRITE_HP,x
+          and #$01
+          beq .SwitchToAttack
+          rts
+          
+.SwitchToAttack          
+          lda #129
+          sta SPRITE_STATE,x
+          
+          lda #0
+          sta SPRITE_MODE_POS,x
+          sta SPRITE_MOVE_POS,x
+          sta SPRITE_MOVE_POS_Y,x
           rts
           
  
@@ -7289,6 +7845,7 @@ SpawnObject
           sta SPRITE_MOVE_POS_Y,x
           sta SPRITE_ANNOYED,x
           sta SPRITE_HITBACK,x
+          sta SPRITE_MODE_POS,x
 
           lda TYPE_START_STATE,y
           sta SPRITE_STATE,x
@@ -8420,7 +8977,7 @@ IsCharBlocking
           
           lda #0
           rts
-          
+
 .Blocking
           lda #1
           rts
@@ -8444,7 +9001,6 @@ IsCharBlockingFall
 .Blocking
           lda #1
           rts
-
 
 ;------------------------------------------------------------
 ;CalcSpritePosFromCharPos
@@ -8738,6 +9294,8 @@ SPRITE_MOVE_POS_Y
           !byte 0,0,0,0,0,0,0,0
 SPRITE_STATE
           !byte 0,0,0,0,0,0,0,0
+SPRITE_MODE_POS
+          !byte 0,0,0,0,0,0,0,0
 SPRITE_ANNOYED
           !byte 0,0,0,0,0,0,0,0
 SPRITE_HITBACK
@@ -8797,6 +9355,7 @@ ENEMY_BEHAVIOUR_TABLE_LO
           !byte <BehaviourImpala      ;impala driver
           !byte <BehaviourImpalaDebris;impala debris
           !byte <BehaviourSpawn
+          !byte <BehaviourBoss
           
 ENEMY_BEHAVIOUR_TABLE_HI
           !byte >PlayerControl
@@ -8825,6 +9384,7 @@ ENEMY_BEHAVIOUR_TABLE_HI
           !byte >BehaviourImpala      ;impala driver
           !byte >BehaviourImpalaDebris;impala debris
           !byte >BehaviourSpawn
+          !byte >BehaviourBoss
           
 ;behaviour for an enemy being hit          
 ENEMY_HIT_BEHAVIOUR_TABLE_LO          
@@ -8853,6 +9413,7 @@ ENEMY_HIT_BEHAVIOUR_TABLE_LO
           !byte <BehaviourNone        ;impala driver
           !byte <BehaviourNone        ;impala debris
           !byte <BehaviourNone        ;spawn
+          !byte <HitBehaviourBoss     ;boss
           
           
 ENEMY_HIT_BEHAVIOUR_TABLE_HI
@@ -8881,6 +9442,7 @@ ENEMY_HIT_BEHAVIOUR_TABLE_HI
           !byte >BehaviourNone        ;impala driver
           !byte >BehaviourNone        ;impala debris
           !byte >BehaviourNone        ;spawn
+          !byte >HitBehaviourBoss     ;boss
           
 IS_TYPE_ENEMY
           !byte 0     ;dummy entry for inactive object
@@ -8910,6 +9472,7 @@ IS_TYPE_ENEMY
           !byte 0     ;impala driver
           !byte 0     ;impala debris
           !byte 0     ;spawn
+          !byte 1     ;boss
           
 TYPE_START_SPRITE
           !byte 0     ;dummy entry for inactive object
@@ -8939,6 +9502,7 @@ TYPE_START_SPRITE
           !byte SPRITE_DRIVERS
           !byte SPRITE_DEBRIS_1
           !byte SPRITE_SPAWN_1
+          !byte SPRITE_BOSS_R_1
           
 TYPE_START_COLOR
           !byte 0
@@ -8968,6 +9532,7 @@ TYPE_START_COLOR
           !byte 9     ;impala driver
           !byte 9     ;impala debris
           !byte 12    ;spawn
+          !byte 0     ;boss
           
 TYPE_START_MULTICOLOR
           !byte 0     ;dummy
@@ -8997,6 +9562,7 @@ TYPE_START_MULTICOLOR
           !byte 1     ;impala driver
           !byte 0     ;impala debris
           !byte 0     ;spawn
+          !byte 0     ;boss
           
 TYPE_START_HP
           !byte 0     ;dummy
@@ -9026,6 +9592,7 @@ TYPE_START_HP
           !byte 0     ;impala driver
           !byte 0     ;impala debris
           !byte 0     ;spawn
+          !byte 10    ;boss
           
 TYPE_ANNOYED_COLOR
           !byte 0     ;dummy
@@ -9055,6 +9622,7 @@ TYPE_ANNOYED_COLOR
           !byte 0     ;impala driver
           !byte 0     ;impala debris
           !byte 7     ;spawn
+          !byte 0     ;boss
           
           
 ;enemy start direction, 2 bits per dir.
@@ -9100,6 +9668,7 @@ TYPE_START_DIRECTION
           !byte 0             ;impala driver
           !byte 0             ;impala debris
           !byte 0             ;spawn
+          !byte %00001010     ;boss
           
 TYPE_START_STATE
           !byte 0             ;dummy
@@ -9129,6 +9698,7 @@ TYPE_START_STATE
           !byte 0             ;impala driver
           !byte 0             ;impala debris
           !byte 128           ;spawn
+          !byte 0             ;boss
           
 TYPE_START_DELTA_Y
           !byte 0     ;dummy
@@ -9158,6 +9728,7 @@ TYPE_START_DELTA_Y
           !byte 0     ;impala driver
           !byte 0     ;impala debris
           !byte 0     ;spawn
+          !byte 0     ;boss
           
 BAT_ANIMATION
           !byte SPRITE_BAT_1
@@ -9220,6 +9791,9 @@ HAND_ANIM_TABLE
           !byte SPRITE_HAND_6
 HAND_COLOR_TABLE
           !byte 7,13,13,5,5,5
+          
+BOSS_FLASH_TABLE
+          !byte 0,11,12,15,1,15,12,11
 
 PATH_8_DX
           !byte $86
@@ -9352,7 +9926,7 @@ TEXT_GAME_MODE_SINGLE_DEAN
 TEXT_GAME_MODE_SINGLE_SAM
           !text "SINGLE PLAYER SAM *"
 TEXT_GAME_MODE_COOP
-          !text " COOPERATIVE PLAY*"
+          !text " COOPERATIVE PLAY *"
           
 TEXT_FIRE_TO_START
           !text "PRESS FIRE TO PLAY*"
@@ -9362,6 +9936,18 @@ TEXT_ENTER_NAME
 TEXT_GET_READY
           !text 226,228,230,0,232,228,234,235,237,231,"-"
           !text 227,229,231,0,233,229,233,236,231,238,"*"
+          
+CHAPTER
+          !byte 0
+
+          
+CHAPTER_PAGES_LO
+          !byte <TEXT_STORY_1
+          !byte <TEXT_STORY_2
+CHAPTER_PAGES_HI
+          !byte >TEXT_STORY_1
+          !byte >TEXT_STORY_2
+          
           
 TEXT_STORY_1
           !text "A LOCAL NEWSPAPER MENTIONS SEVERAL-"
@@ -9420,7 +10006,23 @@ COLOR_FADE_1
 GAME_MODE
           !byte GT_SINGLE_PLAYER_DEAN
 
+BEAM_CHAR_H
+          !byte 239
+          !byte 241
+          !byte 243
+          !byte 243
 
+BEAM_CHAR_V
+          !byte 240
+          !byte 242
+          !byte 244
+          !byte 244
+
+BEAM_COLOR
+          !byte 6
+          !byte 4
+          !byte 3
+          !byte 1
 
 ;------------------------------------------------------------
 ;tile data
@@ -9429,533 +10031,6 @@ GAME_MODE
 
 !source "tiles.asm"
 
-
-
-;------------------------------------------------------------
-;screen data
-;------------------------------------------------------------
-SCREEN_DATA_TABLE
-          !word SN_LEVEL_1
-          !word SN_LEVEL_2
-          !word LEVEL_1
-          !word LEVEL_2
-          !word LEVEL_3
-          !word LEVEL_4
-          !word LEVEL_5
-          !word LEVEL_6
-          !word LEVEL_7
-          !word LEVEL_8
-          !word LEVEL_9
-          !word LEVEL_10
-          !word LEVEL_11
-          !word LEVEL_12
-          !word LEVEL_13
-          !word LEVEL_14
-          !word LEVEL_15
-          !word LEVEL_16
-          !word LEVEL_17
-          !word LEVEL_18
-          !word LEVEL_19
-          !word LEVEL_20
-          !word LEVEL_21
-          !word LEVEL_22
-          !word LEVEL_23
-          !word 0
-          
-LEVEL_1
-          !byte LD_LINE_H,5,5,10,160,13
-          !byte LD_LINE_H,12,7,8,160,13
-          !byte LD_LINE_H,30,12,9,161,13
-          !byte LD_LINE_H_ALT,10,19,20,160,13
-          !byte LD_LINE_V_ALT,7,6,4,192,9
-          !byte LD_LINE_H,19,8,3,160,13
-          !byte LD_LINE_H,24,10,4,160,13
-          !byte LD_LINE_H,20,11,4,160,13
-          !byte LD_QUAD,20,4,0
-          !byte LD_QUAD,25,6,0
-          !byte LD_LINE_H,16,12,4,160,13
-          !byte LD_LINE_H,12,13,4,160,13
-          !byte LD_LINE_H,8,14,4,160,13
-          !byte LD_LINE_H,6,16,5,160,13
-          !byte LD_OBJECT,5,4,TYPE_PLAYER_DEAN
-          !byte LD_OBJECT,34,4,TYPE_PLAYER_SAM
-          !byte LD_OBJECT,34,11,TYPE_BAT_DIAG
-          !byte LD_OBJECT,31,12,TYPE_BAT_8
-          !byte LD_OBJECT,10,18,TYPE_BAT_UD
-          !byte LD_OBJECT,20,18,TYPE_MUMMY
-          !byte LD_AREA,2,8,7,5,160,13
-          !byte LD_END
-
-LEVEL_2
-          !byte LD_LINE_H,5,5,10,160,13
-          !byte LD_LINE_H,1,21,38,160,13
-          !byte LD_LINE_H,7,7,3,160,13
-          !byte LD_LINE_H,9,9,3,160,13
-          !byte LD_LINE_H,11,11,3,160,13
-          !byte LD_LINE_H,13,13,3,160,13
-          !byte LD_LINE_H,15,15,3,160,13
-          !byte LD_LINE_H,17,17,3,160,13
-          !byte LD_LINE_H,19,19,3,160,13
-          !byte LD_OBJECT,19,20,TYPE_PLAYER_DEAN
-          !byte LD_OBJECT,22,20,TYPE_PLAYER_SAM
-          !byte LD_OBJECT,4,5,TYPE_BAT_DIAG
-          !byte LD_OBJECT,4,20,TYPE_ZOMBIE
-          !byte LD_END
-
-LEVEL_3
-          !byte LD_LINE_H,25,15,10,160,13
-          !byte LD_LINE_H,17,18,8,160,13
-          !byte LD_LINE_H,5,15,10,160,13
-          !byte LD_LINE_H,25,21,8,160,13
-          !byte LD_OBJECT,30,14,TYPE_PLAYER_DEAN
-          !byte LD_OBJECT,10,14,TYPE_PLAYER_SAM
-          !byte LD_OBJECT,9,12,TYPE_BAT_VANISH
-          !byte LD_END
-
-LEVEL_4
-          !byte LD_AREA,1,1,38,21,2,13
-          !byte LD_LINE_H_ALT,1,5,20,160,13
-          !byte LD_LINE_H_ALT,25,5,14,160,13
-          !byte LD_LINE_H_ALT,1,8,10,160,13
-          !byte LD_LINE_H_ALT,15,8,24,160,13
-          !byte LD_LINE_H_ALT,1,11,18,160,13
-          !byte LD_LINE_H_ALT,23,11,16,160,13
-          !byte LD_LINE_H_ALT,1,14,33,160,13
-          !byte LD_LINE_H_ALT,38,14,2,160,13
-          !byte LD_LINE_H_ALT,6,17,33,160,13
-          !byte LD_LINE_H_ALT,12,20,6,160,13
-          !byte LD_OBJECT,3,21,TYPE_PLAYER_DEAN
-          !byte LD_OBJECT,36,21,TYPE_PLAYER_SAM
-          !byte LD_OBJECT,33,4,TYPE_ZOMBIE
-          !byte LD_OBJECT,23,7,TYPE_ZOMBIE
-          !byte LD_OBJECT,10,10,TYPE_ZOMBIE
-          !byte LD_OBJECT,30,13,TYPE_ZOMBIE
-          !byte LD_OBJECT,20,16,TYPE_ZOMBIE
-          !byte LD_OBJECT,35,21,TYPE_ZOMBIE
-          !byte LD_END
-
-LEVEL_5
-          !byte LD_LINE_H_ALT,5,7,4,160,13
-          !byte LD_LINE_H_ALT,5,10,9,160,13
-          !byte LD_LINE_H_ALT,4,13,3,160,13
-          !byte LD_LINE_H_ALT,1,16,3,160,13
-          !byte LD_LINE_H_ALT,10,19,6,160,13
-          !byte LD_LINE_H_ALT,16,10,4,160,13
-          !byte LD_LINE_H_ALT,22,10,4,160,13
-          !byte LD_LINE_H_ALT,24,7,15,160,13
-          !byte LD_LINE_H_ALT,24,13,11,160,13
-          !byte LD_LINE_H_ALT,24,16,11,160,13
-          !byte LD_LINE_H_ALT,28,19,4,160,13
-          
-          !byte LD_OBJECT,13,18,TYPE_PLAYER_DEAN
-          !byte LD_OBJECT,26,18,TYPE_PLAYER_SAM
-          !byte LD_OBJECT,18,5,TYPE_BAT_DIAG
-          !byte LD_OBJECT,34,8,TYPE_BAT_DIAG  
-          !byte LD_OBJECT,9,11,TYPE_BAT_DIAG  
-          !byte LD_OBJECT,15,14,TYPE_BAT_DIAG  
-          !byte LD_OBJECT,25,17,TYPE_BAT_DIAG  
-          !byte LD_END
-
-LEVEL_6
-          !byte LD_LINE_H_ALT,1,10,5,160,13
-          !byte LD_LINE_H_ALT,1,13,9,160,13
-          !byte LD_LINE_H_ALT,1,16,13,160,13
-          !byte LD_LINE_H_ALT,1,19,17,160,13
-          !byte LD_LINE_H_ALT,34,10,5,160,13
-          !byte LD_LINE_H_ALT,30,13,9,160,13
-          !byte LD_LINE_H_ALT,26,16,13,160,13
-          !byte LD_LINE_H_ALT,22,19,17,160,13
-          
-          !byte LD_OBJECT,19,21,TYPE_PLAYER_DEAN
-          !byte LD_OBJECT,21,21,TYPE_PLAYER_SAM
-          !byte LD_OBJECT,5,5,TYPE_BAT_DIAG  
-          !byte LD_OBJECT,15,5,TYPE_BAT_DIAG  
-          !byte LD_OBJECT,25,5,TYPE_BAT_DIAG  
-          !byte LD_OBJECT,35,5,TYPE_BAT_DIAG  
-          !byte LD_END
-
-LEVEL_7
-          !byte LD_LINE_H_ALT,1,5,5,160,13
-          !byte LD_LINE_H_ALT,1,8,5,160,13
-          !byte LD_LINE_H_ALT,1,11,5,160,13
-          !byte LD_LINE_H_ALT,1,14,5,160,13
-          !byte LD_LINE_H_ALT,1,17,5,160,13
-          !byte LD_LINE_H_ALT,1,20,5,160,13
-          
-          !byte LD_LINE_H_ALT,34,5,5,160,13
-          !byte LD_LINE_H_ALT,34,8,5,160,13
-          !byte LD_LINE_H_ALT,34,11,5,160,13
-          !byte LD_LINE_H_ALT,34,14,5,160,13
-          !byte LD_LINE_H_ALT,34,17,5,160,13
-          !byte LD_LINE_H_ALT,34,20,5,160,13
-          
-          !byte LD_LINE_V_ALT,6,8,11,192,9
-          !byte LD_LINE_V_ALT,33,8,11,192,9
-          
-          !byte LD_OBJECT,19,21,TYPE_PLAYER_DEAN
-          !byte LD_OBJECT,21,21,TYPE_PLAYER_SAM
-          !byte LD_OBJECT,15,5,TYPE_BAT_DIAG  
-          !byte LD_OBJECT,20,5,TYPE_BAT_DIAG  
-          !byte LD_OBJECT,25,5,TYPE_BAT_DIAG  
-          !byte LD_OBJECT,17,9,TYPE_BAT_DIAG  
-          !byte LD_OBJECT,23,9,TYPE_BAT_DIAG  
-          !byte LD_END
-
-LEVEL_8
-          !byte LD_LINE_H_ALT,1,5,5,160,13
-          !byte LD_LINE_H_ALT,10,5,20,160,13
-          !byte LD_LINE_H_ALT,34,5,5,160,13
-          !byte LD_LINE_H_ALT,1,8,5,160,13
-          !byte LD_LINE_H_ALT,10,8,20,160,13
-          !byte LD_LINE_H_ALT,34,8,5,160,13
-          !byte LD_LINE_V_ALT,10,6,3,2,13
-          !byte LD_LINE_V_ALT,16,6,3,2,13
-          !byte LD_LINE_V_ALT,23,6,3,2,13
-          !byte LD_LINE_V_ALT,29,6,3,2,13
-          !byte LD_LINE_H_ALT,5,11,7,160,13
-          !byte LD_LINE_H_ALT,28,11,7,160,13
-          !byte LD_LINE_H_ALT,10,14,20,160,13
-          !byte LD_LINE_H_ALT,5,17,7,160,13
-          !byte LD_LINE_H_ALT,28,17,7,160,13
-          !byte LD_LINE_H_ALT,10,20,20,160,13
-          !byte LD_OBJECT,19,21,TYPE_PLAYER_DEAN
-          !byte LD_OBJECT,21,21,TYPE_PLAYER_SAM
-          !byte LD_OBJECT,15,5,TYPE_BAT_DIAG  
-          !byte LD_OBJECT,20,5,TYPE_BAT_DIAG  
-          !byte LD_OBJECT,25,5,TYPE_BAT_DIAG  
-          !byte LD_OBJECT,17,9,TYPE_BAT_DIAG  
-          !byte LD_OBJECT,23,9,TYPE_BAT_DIAG  
-          !byte LD_END
-
-LEVEL_9
-          !byte LD_LINE_H_ALT,1,19,12,160,13
-          !byte LD_LINE_H_ALT,14,19,12,160,13
-          !byte LD_LINE_H_ALT,29,19,12,160,13
-          !byte LD_OBJECT,19,21,TYPE_PLAYER_DEAN
-          !byte LD_OBJECT,21,21,TYPE_PLAYER_SAM          
-          !byte LD_OBJECT,37,18,TYPE_SPIDER
-          !byte LD_END
-
-LEVEL_10
-          !byte LD_LINE_H_ALT,1,5,14,160,13
-          !byte LD_LINE_H_ALT,13,8,14,160,13
-          !byte LD_LINE_H_ALT,25,11,14,160,13
-          !byte LD_LINE_H_ALT,13,14,14,160,13
-          !byte LD_LINE_H_ALT,1,17,14,160,13
-          !byte LD_LINE_H_ALT,1,20,38,160,13
-          !byte LD_LINE_H_ALT,1,21,38,2,13
-          
-          !byte LD_OBJECT,18,19,TYPE_PLAYER_DEAN
-          !byte LD_OBJECT,21,19,TYPE_PLAYER_SAM
-          
-          !byte LD_OBJECT,4,4,TYPE_SPIDER
-          !byte LD_OBJECT,19,7,TYPE_SPIDER
-          !byte LD_OBJECT,34,10,TYPE_SPIDER
-          !byte LD_OBJECT,19,13,TYPE_SPIDER
-          !byte LD_OBJECT,4,16,TYPE_SPIDER
-          !byte LD_END
-
-LEVEL_11
-          !byte LD_LINE_H_ALT,1,5,14,160,13
-          !byte LD_LINE_H_ALT,13,8,14,160,13
-          !byte LD_LINE_H_ALT,25,11,14,160,13
-          !byte LD_LINE_H_ALT,13,14,14,160,13
-          !byte LD_LINE_H_ALT,1,17,14,160,13
-          !byte LD_LINE_H_ALT,1,20,38,160,13
-          !byte LD_LINE_H_ALT,1,21,38,2,13
-          !byte LD_QUAD,3,3,1
-          
-          !byte LD_OBJECT,18,19,TYPE_PLAYER_DEAN
-          !byte LD_OBJECT,21,19,TYPE_PLAYER_SAM
-          
-          !byte LD_SPAWN_SPOT,4,4,TYPE_SPIDER,5
-          !byte LD_OBJECT,19,7,TYPE_SPIDER
-          !byte LD_OBJECT,34,10,TYPE_SPIDER
-          !byte LD_OBJECT,19,13,TYPE_SPIDER
-          !byte LD_OBJECT,4,16,TYPE_SPIDER
-          !byte LD_END
-
-LEVEL_12
-          !byte LD_QUAD,3,3,2
-          
-          !byte LD_QUAD,6,3,1
-          !byte LD_LINE_H_ALT,4,5,6,160,13
-          !byte LD_QUAD,6,8,1
-          !byte LD_LINE_H_ALT,4,10,6,160,13
-          !byte LD_QUAD,6,13,1
-          !byte LD_LINE_H_ALT,4,15,6,160,13
-          !byte LD_QUAD,32,3,1
-          !byte LD_LINE_H_ALT,30,5,6,160,13
-          !byte LD_QUAD,32,8,1
-          !byte LD_LINE_H_ALT,30,10,6,160,13
-          !byte LD_QUAD,32,13,1
-          !byte LD_LINE_H_ALT,30,15,6,160,13
-          
-          !byte LD_OBJECT,18,21,TYPE_PLAYER_DEAN
-          !byte LD_OBJECT,21,21,TYPE_PLAYER_SAM
-          
-          !byte LD_SPAWN_SPOT,6,4,TYPE_ZOMBIE,5
-          !byte LD_SPAWN_SPOT,6,9,TYPE_ZOMBIE,5
-          !byte LD_SPAWN_SPOT,6,14,TYPE_ZOMBIE,5
-          !byte LD_SPAWN_SPOT,32,4,TYPE_ZOMBIE,5
-          !byte LD_SPAWN_SPOT,32,9,TYPE_ZOMBIE,5
-          !byte LD_SPAWN_SPOT,32,14,TYPE_ZOMBIE,5
-          !byte LD_END
-
-LEVEL_13
-          !byte LD_LINE_H,25,15,10,160,13
-          !byte LD_LINE_H,17,18,8,160,13
-          !byte LD_LINE_H,5,15,10,160,13
-          !byte LD_LINE_H,25,21,8,160,13
-          !byte LD_OBJECT,30,14,TYPE_PLAYER_DEAN
-          !byte LD_OBJECT,10,14,TYPE_PLAYER_SAM
-          !byte LD_OBJECT,9,12,TYPE_WOLFMAN
-          !byte LD_END
-
-LEVEL_14
-          !byte LD_LINE_H,1,10,18,160,13
-          !byte LD_LINE_H,1,13,18,160,13
-          !byte LD_LINE_H,1,16,18,160,13
-          !byte LD_LINE_H,1,19,18,160,13
-          !byte LD_LINE_H,22,10,18,160,13
-          !byte LD_LINE_H,22,13,18,160,13
-          !byte LD_LINE_H,22,16,18,160,13
-          !byte LD_LINE_H,22,19,18,160,13
-          !byte LD_OBJECT,30,15,TYPE_PLAYER_DEAN
-          !byte LD_OBJECT,10,15,TYPE_PLAYER_SAM
-          !byte LD_OBJECT,9,12,TYPE_WOLFMAN
-          !byte LD_OBJECT,30,12,TYPE_WOLFMAN
-          !byte LD_OBJECT,9,18,TYPE_WOLFMAN
-          !byte LD_OBJECT,30,18,TYPE_WOLFMAN
-          !byte LD_END
-
-LEVEL_15
-          !byte LD_LINE_H,4,10,5,160,13
-          !byte LD_LINE_H,4,13,5,160,13
-          !byte LD_LINE_H,4,16,5,160,13
-          !byte LD_LINE_H,4,19,5,160,13
-          !byte LD_LINE_H,12,10,5,160,13
-          !byte LD_LINE_H,12,13,5,160,13
-          !byte LD_LINE_H,12,16,5,160,13
-          !byte LD_LINE_H,12,19,5,160,13
-          !byte LD_LINE_H,23,10,5,160,13
-          !byte LD_LINE_H,23,13,5,160,13
-          !byte LD_LINE_H,23,16,5,160,13
-          !byte LD_LINE_H,23,19,5,160,13
-          !byte LD_LINE_H,30,10,5,160,13
-          !byte LD_LINE_H,30,13,5,160,13
-          !byte LD_LINE_H,30,16,5,160,13
-          !byte LD_LINE_H,30,19,5,160,13
-          !byte LD_OBJECT,22,15,TYPE_PLAYER_DEAN
-          !byte LD_OBJECT,17,15,TYPE_PLAYER_SAM
-          !byte LD_OBJECT,9,11,TYPE_GHOST_SKELETON
-          !byte LD_OBJECT,30,11,TYPE_GHOST_SKELETON
-          !byte LD_OBJECT,9,17,TYPE_GHOST_SKELETON
-          !byte LD_OBJECT,30,17,TYPE_GHOST_SKELETON
-          !byte LD_END
-
-LEVEL_16
-          !byte LD_LINE_H_ALT,1,5,5,160,13
-          !byte LD_LINE_H_ALT,1,8,5,160,13
-          !byte LD_LINE_H_ALT,1,11,5,160,13
-          !byte LD_LINE_H_ALT,1,14,5,160,13
-          !byte LD_LINE_H_ALT,1,17,5,160,13
-          !byte LD_LINE_H_ALT,1,20,5,160,13
-          
-          !byte LD_LINE_H_ALT,34,5,5,160,13
-          !byte LD_LINE_H_ALT,34,8,5,160,13
-          !byte LD_LINE_H_ALT,34,11,5,160,13
-          !byte LD_LINE_H_ALT,34,14,5,160,13
-          !byte LD_LINE_H_ALT,34,17,5,160,13
-          !byte LD_LINE_H_ALT,34,20,5,160,13
-          
-          !byte LD_LINE_V_ALT,6,8,11,192,9
-          !byte LD_LINE_V_ALT,33,8,11,192,9
-          
-          !byte LD_OBJECT,19,21,TYPE_PLAYER_DEAN
-          !byte LD_OBJECT,21,21,TYPE_PLAYER_SAM
-          !byte LD_OBJECT,15,5,TYPE_JUMPING_TOAD
-          !byte LD_OBJECT,20,5,TYPE_JUMPING_TOAD  
-          !byte LD_OBJECT,25,5,TYPE_JUMPING_TOAD  
-          !byte LD_OBJECT,17,9,TYPE_JUMPING_TOAD  
-          !byte LD_OBJECT,23,9,TYPE_JUMPING_TOAD  
-          !byte LD_END
-
-LEVEL_17
-          !byte LD_LINE_H_ALT,1,5,5,160,13
-          !byte LD_LINE_H_ALT,10,5,20,160,13
-          !byte LD_LINE_H_ALT,34,5,5,160,13
-          !byte LD_LINE_H_ALT,1,8,5,160,13
-          !byte LD_LINE_H_ALT,10,8,20,160,13
-          !byte LD_LINE_H_ALT,34,8,5,160,13
-          !byte LD_LINE_V_ALT,10,6,3,2,13
-          !byte LD_LINE_V_ALT,16,6,3,2,13
-          !byte LD_LINE_V_ALT,23,6,3,2,13
-          !byte LD_LINE_V_ALT,29,6,3,2,13
-          !byte LD_LINE_H_ALT,5,11,7,160,13
-          !byte LD_LINE_H_ALT,28,11,7,160,13
-          !byte LD_LINE_H_ALT,10,14,20,160,13
-          !byte LD_LINE_H_ALT,5,17,7,160,13
-          !byte LD_LINE_H_ALT,28,17,7,160,13
-          !byte LD_LINE_H_ALT,10,20,20,160,13
-          !byte LD_OBJECT,19,21,TYPE_PLAYER_DEAN
-          !byte LD_OBJECT,21,21,TYPE_PLAYER_SAM
-          !byte LD_OBJECT,15,5,TYPE_EYE
-          !byte LD_OBJECT,20,5,TYPE_EYE
-          !byte LD_OBJECT,25,5,TYPE_EYE  
-          !byte LD_OBJECT,17,9,TYPE_EYE  
-          !byte LD_OBJECT,23,9,TYPE_EYE  
-          !byte LD_END
-
-LEVEL_18
-          !byte LD_LINE_H_ALT,1,5,5,160,13
-          !byte LD_LINE_H_ALT,10,5,20,160,13
-          !byte LD_LINE_H_ALT,34,5,5,160,13
-          !byte LD_LINE_H_ALT,1,8,5,160,13
-          !byte LD_LINE_H_ALT,10,8,20,160,13
-          !byte LD_LINE_H_ALT,34,8,5,160,13
-          !byte LD_LINE_V_ALT,10,6,3,2,13
-          !byte LD_LINE_V_ALT,16,6,3,2,13
-          !byte LD_LINE_V_ALT,23,6,3,2,13
-          !byte LD_LINE_V_ALT,29,6,3,2,13
-          !byte LD_LINE_H_ALT,5,11,7,160,13
-          !byte LD_LINE_H_ALT,28,11,7,160,13
-          !byte LD_LINE_H_ALT,10,14,20,160,13
-          !byte LD_LINE_H_ALT,5,17,7,160,13
-          !byte LD_LINE_H_ALT,28,17,7,160,13
-          !byte LD_LINE_H_ALT,10,20,20,160,13
-          !byte LD_OBJECT,19,21,TYPE_PLAYER_DEAN
-          !byte LD_OBJECT,21,21,TYPE_PLAYER_SAM
-          !byte LD_OBJECT,15,5,TYPE_FLOATING_GHOST
-          !byte LD_OBJECT,20,5,TYPE_FLOATING_GHOST
-          !byte LD_OBJECT,25,5,TYPE_FLOATING_GHOST  
-          !byte LD_OBJECT,17,9,TYPE_FLOATING_GHOST  
-          !byte LD_OBJECT,23,9,TYPE_FLOATING_GHOST  
-          !byte LD_END
-
-LEVEL_19
-          !byte LD_LINE_H_ALT,1,5,5,160,13
-          !byte LD_LINE_H_ALT,10,5,20,160,13
-          !byte LD_LINE_H_ALT,34,5,5,160,13
-          !byte LD_LINE_H_ALT,1,8,5,160,13
-          !byte LD_LINE_H_ALT,10,8,20,160,13
-          !byte LD_LINE_H_ALT,34,8,5,160,13
-          !byte LD_LINE_V_ALT,10,6,3,2,13
-          !byte LD_LINE_V_ALT,16,6,3,2,13
-          !byte LD_LINE_V_ALT,23,6,3,2,13
-          !byte LD_LINE_V_ALT,29,6,3,2,13
-          !byte LD_LINE_H_ALT,5,11,7,160,13
-          !byte LD_LINE_H_ALT,28,11,7,160,13
-          !byte LD_LINE_H_ALT,10,14,20,160,13
-          !byte LD_LINE_H_ALT,5,17,7,160,13
-          !byte LD_LINE_H_ALT,28,17,7,160,13
-          !byte LD_LINE_H_ALT,10,20,20,160,13
-          !byte LD_OBJECT,19,21,TYPE_PLAYER_DEAN
-          !byte LD_OBJECT,21,21,TYPE_PLAYER_SAM
-          !byte LD_OBJECT,15,5,TYPE_FLY
-          !byte LD_OBJECT,20,5,TYPE_FLY
-          !byte LD_OBJECT,25,5,TYPE_FLY  
-          !byte LD_OBJECT,17,9,TYPE_FLY  
-          !byte LD_OBJECT,23,9,TYPE_FLY  
-          !byte LD_END
-
-LEVEL_20
-          !byte LD_LINE_H_ALT,1,5,5,160,13
-          !byte LD_LINE_H_ALT,1,8,5,160,13
-          !byte LD_LINE_H_ALT,1,11,5,160,13
-          !byte LD_LINE_H_ALT,1,14,5,160,13
-          !byte LD_LINE_H_ALT,1,17,5,160,13
-          !byte LD_LINE_H_ALT,1,20,5,160,13
-          
-          !byte LD_LINE_H_ALT,34,5,5,160,13
-          !byte LD_LINE_H_ALT,34,8,5,160,13
-          !byte LD_LINE_H_ALT,34,11,5,160,13
-          !byte LD_LINE_H_ALT,34,14,5,160,13
-          !byte LD_LINE_H_ALT,34,17,5,160,13
-          !byte LD_LINE_H_ALT,34,20,5,160,13
-          
-          !byte LD_LINE_V_ALT,6,8,11,192,9
-          !byte LD_LINE_V_ALT,33,8,11,192,9
-          
-          !byte LD_OBJECT,19,21,TYPE_PLAYER_DEAN
-          !byte LD_OBJECT,21,21,TYPE_PLAYER_SAM
-          !byte LD_OBJECT,15,5,TYPE_SLIME
-          !byte LD_OBJECT,20,5,TYPE_SLIME  
-          !byte LD_OBJECT,25,5,TYPE_SLIME  
-          !byte LD_OBJECT,17,9,TYPE_SLIME  
-          !byte LD_OBJECT,23,9,TYPE_SLIME  
-          !byte LD_END
-
-LEVEL_21
-          !byte LD_QUAD,3,3,2
-          
-          !byte LD_QUAD,6,3,1
-          !byte LD_LINE_H_ALT,4,5,6,160,13
-          !byte LD_QUAD,6,8,1
-          !byte LD_LINE_H_ALT,4,10,6,160,13
-          !byte LD_QUAD,6,13,1
-          !byte LD_LINE_H_ALT,4,15,6,160,13
-          !byte LD_QUAD,32,3,1
-          !byte LD_LINE_H_ALT,30,5,6,160,13
-          !byte LD_QUAD,32,8,1
-          !byte LD_LINE_H_ALT,30,10,6,160,13
-          !byte LD_QUAD,32,13,1
-          !byte LD_LINE_H_ALT,30,15,6,160,13
-          
-          !byte LD_OBJECT,18,21,TYPE_PLAYER_DEAN
-          !byte LD_OBJECT,21,21,TYPE_PLAYER_SAM
-          
-          !byte LD_SPAWN_SPOT,6,4,TYPE_FRANKENSTEIN,5
-          !byte LD_SPAWN_SPOT,6,9,TYPE_FRANKENSTEIN,5
-          !byte LD_SPAWN_SPOT,6,14,TYPE_FRANKENSTEIN,5
-          !byte LD_SPAWN_SPOT,32,4,TYPE_FRANKENSTEIN,5
-          !byte LD_SPAWN_SPOT,32,9,TYPE_FRANKENSTEIN,5
-          !byte LD_SPAWN_SPOT,32,14,TYPE_FRANKENSTEIN,5
-          !byte LD_END
-
-LEVEL_22
-          !byte LD_QUAD,3,3,2
-          
-          !byte LD_QUAD,6,3,1
-          !byte LD_LINE_H_ALT,4,5,6,160,13
-          !byte LD_QUAD,6,8,1
-          !byte LD_LINE_H_ALT,4,10,6,160,13
-          !byte LD_QUAD,6,13,1
-          !byte LD_LINE_H_ALT,4,15,6,160,13
-          !byte LD_QUAD,32,3,1
-          !byte LD_LINE_H_ALT,30,5,6,160,13
-          !byte LD_QUAD,32,8,1
-          !byte LD_LINE_H_ALT,30,10,6,160,13
-          !byte LD_QUAD,32,13,1
-          !byte LD_LINE_H_ALT,30,15,6,160,13
-          
-          !byte LD_OBJECT,18,21,TYPE_PLAYER_DEAN
-          !byte LD_OBJECT,21,21,TYPE_PLAYER_SAM
-          
-          !byte LD_OBJECT,6,21,TYPE_HAND
-          !byte LD_OBJECT,29,21,TYPE_HAND
-          !byte LD_END
-
-LEVEL_23
-          !byte LD_LINE_H,5,5,10,160,13
-          !byte LD_LINE_H,12,7,8,160,13
-          !byte LD_LINE_H,30,12,9,161,13
-          !byte LD_LINE_H_ALT,10,19,20,160,13
-          !byte LD_LINE_V_ALT,7,6,4,192,9
-          !byte LD_LINE_H,19,8,3,160,13
-          !byte LD_LINE_H,24,10,4,160,13
-          !byte LD_LINE_H,20,11,4,160,13
-          !byte LD_QUAD,20,4,0
-          !byte LD_QUAD,25,6,0
-          !byte LD_LINE_H,16,12,4,160,13
-          !byte LD_LINE_H,12,13,4,160,13
-          !byte LD_LINE_H,8,14,4,160,13
-          !byte LD_LINE_H,6,16,5,160,13
-          !byte LD_OBJECT,5,4,TYPE_PLAYER_DEAN
-          !byte LD_OBJECT,34,4,TYPE_PLAYER_SAM
-          !byte LD_OBJECT,20,18,TYPE_DEVIL
-          !byte LD_AREA,2,8,7,5,160,13
-          !byte LD_END
 
 
 LEVEL_BORDER_DATA

@@ -107,6 +107,7 @@ SN_SCREEN_DATA_TABLE
           !word SN_LEVEL_9
           !word SN_LEVEL_10
           !word SN_LEVEL_11
+          !word SN_LEVEL_12
           !word 0
 
 
@@ -377,7 +378,7 @@ SN_LEVEL_9
           !byte LD_END
 SN_LEVEL_10
           !byte LD_AREA,6,3,28,12,93,2
-          !byte LD_ELEMENT,18,9,EL_SN_TOMB_DOOR
+          !byte LD_ELEMENT,18,10,EL_SN_TOMB_DOOR
           !byte LD_ELEMENT,20,10,EL_SN_TOMB_DOOR
           !byte LD_LINE_H,6,3,28,92,2
           !byte LD_LINE_H,17,13,6,92,2
@@ -426,6 +427,26 @@ SN_LEVEL_10
           !byte LD_LINE_H,7,20,8,32,2
           !byte LD_END
 SN_LEVEL_11
+          !byte LD_AREA,1,1,38,21,93,6
+          !byte LD_LINE_H_ALT,2,19,8,160,13
+          !byte LD_LINE_H_ALT,30,19,8,160,13
+          !byte LD_LINE_H_ALT,2,16,4,160,13
+          !byte LD_LINE_H_ALT,34,16,4,160,13
+          !byte LD_LINE_H_ALT,30,13,4,160,13
+          !byte LD_LINE_H_ALT,6,13,4,160,13
+          !byte LD_LINE_H_ALT,2,10,4,160,13
+          !byte LD_LINE_H_ALT,6,7,4,160,13
+          !byte LD_LINE_H_ALT,34,10,4,160,13
+          !byte LD_LINE_H_ALT,30,7,4,160,13
+          !byte LD_LINE_H_ALT,10,10,4,160,13
+          !byte LD_LINE_H_ALT,26,10,4,160,13
+          !byte LD_LINE_H_ALT,18,7,4,160,13
+          !byte LD_LINE_H_ALT,18,13,4,160,13
+          !byte LD_OBJECT,7,18,TYPE_PLAYER_DEAN
+          !byte LD_OBJECT,32,18,TYPE_PLAYER_SAM
+          !byte LD_OBJECT,19,20,TYPE_BOSS
+          !byte LD_END
+SN_LEVEL_12
           !byte LD_LINE_H_ALT,1,20,38,160,13
           !byte LD_LINE_H_ALT,1,11,4,160,13
           !byte LD_LINE_H_ALT,1,14,4,160,13
