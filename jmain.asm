@@ -47,6 +47,11 @@ PROCESSOR_PORT          = $01
 
 START_LEVEL             = 24
 
+MUSIC_IN_GAME_TUNE		    = $00
+MUSIC_TITLE_TUNE			     = $01
+MUSIC_GET_READY_GAME_OVER_TUNE  = $02 ;Also use this for Game Over!
+MUSIC_GAME_END_TUNE      = $03
+
 
 ;placeholder for various temp parameters
 PARAM1                  = $03
@@ -466,24 +471,23 @@ BEAM_TYPE_LIGHT2        = 3
           lda #$18
           sta $d016
           
-!ifdef MUSIC_PLAYING{
-          ;initialise music player
-          lda #0
-          jsr MUSIC_PLAYER
-          
-          lda #15
-          jsr MUSIC_PLAYER + 6
-          ;sta 54272 + 24
-}
-
 ;------------------------------------------------------------
 ;the title screen game loop
 ;------------------------------------------------------------
 !zone TitleScreen
 TitleScreen
           jsr InitTitleIRQ
-          
+
 TitleScreenWithoutIRQ          
+!ifdef MUSIC_PLAYING{
+          ;initialise music player
+          ldx #0
+          ldy #0
+          lda #MUSIC_TITLE_TUNE
+          jsr MUSIC_PLAYER
+          
+}  
+          
           ldx #0
           stx BUTTON_PRESSED
           stx BUTTON_RELEASED
@@ -701,6 +705,12 @@ TitleScreenWithoutIRQ
           jsr WaitFrame
           jsr ReleaseTitleIRQ
 
+!ifdef MUSIC_PLAYING{
+          ;initialise music player
+          lda #MUSIC_GET_READY_GAME_OVER_TUNE
+          jsr MUSIC_PLAYER
+}          
+
           lda #0
           sta CHAPTER
           jsr ShowStory
@@ -801,6 +811,12 @@ TitleScreenWithoutIRQ
           sta PLAYER_INVINCIBLE          
           sta SPRITE_STATE
           
+!ifdef MUSIC_PLAYING{
+          ;initialise music player
+          lda #MUSIC_IN_GAME_TUNE
+          jsr MUSIC_PLAYER
+          
+}          
           jmp GameLoop
           
 ;------------------------------------------------------------
@@ -1408,6 +1424,7 @@ CheckForHighscore
           jmp .CheckScoreEntry
 
 .NoNewHighscore
+
           jmp TitleScreen
           
 .IsHigher
@@ -1571,6 +1588,12 @@ CheckForHighscore
           
           jsr InitTitleIRQ
           
+!ifdef MUSIC_PLAYING{
+          ;initialise music player
+          lda #MUSIC_GET_READY_GAME_OVER_TUNE
+          jsr MUSIC_PLAYER
+          
+}          
           ;restore bitmap logo colors
           ldx #0
 .FillColor      
@@ -5016,7 +5039,7 @@ SCREEN_BACK_LINE_OFFSET_TABLE_HI
 
 * = $3000
 MUSIC_PLAYER
-!binary "gt2music.bin"
+!binary "music.bin",,2
 
 
 ;------------------------------------------------------------
