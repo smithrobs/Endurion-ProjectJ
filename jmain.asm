@@ -413,7 +413,7 @@ TitleScreenWithoutIRQ
           ;setup level
           jsr StartLevel
           
-          lda #0
+          lda #7
           sta LEVEL_NR
           jsr BuildScreen
           
@@ -706,7 +706,6 @@ StartLevel
 ;------------------------------------------------------------
 !zone CheckForHighscore
 CheckForHighscore
-
 
           lda #0
           sta PARAM1
@@ -1166,7 +1165,7 @@ CheckCollisions
           
           dec PLAYER_LIVES
           jsr DisplayLiveNumber
-
+          
           ldx #0
           stx BUTTON_PRESSED
           stx BUTTON_RELEASED
@@ -3488,6 +3487,8 @@ BuildScreen
           sta ZEROPAGE_POINTER_1 + 1
           
           jsr .BuildLevel
+          
+          jsr DisplayLevelNumber
           rts
           
 .NoMoreLevels
@@ -5072,6 +5073,11 @@ SCREEN_DATA_TABLE
           !word LEVEL_1
           !word LEVEL_2
           !word LEVEL_3
+          !word LEVEL_4
+          !word LEVEL_5
+          !word LEVEL_6
+          !word LEVEL_7
+          !word LEVEL_8
           !word 0
           
           
@@ -5121,6 +5127,118 @@ LEVEL_3
           !byte LD_OBJECT,30,14,TYPE_PLAYER
           !byte LD_OBJECT,9,12,TYPE_BAT_VANISH
           !byte LD_END
+
+LEVEL_4
+          !byte LD_AREA,1,1,38,21,2,13
+          !byte LD_LINE_H_ALT,1,5,20,96,13
+          !byte LD_LINE_H_ALT,25,5,14,96,13
+          !byte LD_LINE_H_ALT,1,8,10,96,13
+          !byte LD_LINE_H_ALT,15,8,24,96,13
+          !byte LD_LINE_H_ALT,1,11,18,96,13
+          !byte LD_LINE_H_ALT,23,11,16,96,13
+          !byte LD_LINE_H_ALT,1,14,33,96,13
+          !byte LD_LINE_H_ALT,38,14,2,96,13
+          !byte LD_LINE_H_ALT,6,17,33,96,13
+          !byte LD_LINE_H_ALT,12,20,6,96,13
+          !byte LD_OBJECT,3,21,TYPE_PLAYER
+          !byte LD_OBJECT,3,4,TYPE_MUMMY
+          !byte LD_OBJECT,33,4,TYPE_ZOMBIE
+          !byte LD_OBJECT,23,7,TYPE_ZOMBIE
+          !byte LD_OBJECT,10,10,TYPE_ZOMBIE
+          !byte LD_OBJECT,30,13,TYPE_ZOMBIE
+          !byte LD_OBJECT,20,16,TYPE_ZOMBIE
+          !byte LD_OBJECT,35,21,TYPE_ZOMBIE
+          !byte LD_END
+
+LEVEL_5
+          !byte LD_LINE_H_ALT,5,7,4,96,13
+          !byte LD_LINE_H_ALT,5,10,9,96,13
+          !byte LD_LINE_H_ALT,4,13,3,96,13
+          !byte LD_LINE_H_ALT,1,16,3,96,13
+          !byte LD_LINE_H_ALT,10,19,6,96,13
+          !byte LD_LINE_H_ALT,16,10,4,96,13
+          !byte LD_LINE_H_ALT,22,10,4,96,13
+          !byte LD_LINE_H_ALT,24,7,15,96,13
+          !byte LD_LINE_H_ALT,24,13,11,96,13
+          !byte LD_LINE_H_ALT,24,16,11,96,13
+          !byte LD_LINE_H_ALT,28,19,4,96,13
+          
+          !byte LD_OBJECT,13,18,TYPE_PLAYER
+          !byte LD_OBJECT,18,5,TYPE_BAT_LR  
+          !byte LD_OBJECT,34,8,TYPE_BAT_LR  
+          !byte LD_OBJECT,9,11,TYPE_BAT_LR  
+          !byte LD_OBJECT,15,14,TYPE_BAT_LR  
+          !byte LD_OBJECT,25,17,TYPE_BAT_LR  
+          !byte LD_END
+
+LEVEL_6
+          !byte LD_LINE_H_ALT,1,10,5,96,13
+          !byte LD_LINE_H_ALT,1,13,9,96,13
+          !byte LD_LINE_H_ALT,1,16,13,96,13
+          !byte LD_LINE_H_ALT,1,19,17,96,13
+          !byte LD_LINE_H_ALT,34,10,5,96,13
+          !byte LD_LINE_H_ALT,30,13,9,96,13
+          !byte LD_LINE_H_ALT,26,16,13,96,13
+          !byte LD_LINE_H_ALT,22,19,17,96,13
+          
+          !byte LD_OBJECT,19,21,TYPE_PLAYER
+          !byte LD_OBJECT,5,5,TYPE_BAT_LR  
+          !byte LD_OBJECT,15,5,TYPE_BAT_LR  
+          !byte LD_OBJECT,25,5,TYPE_BAT_LR  
+          !byte LD_OBJECT,35,5,TYPE_BAT_LR  
+          !byte LD_END
+
+LEVEL_7
+          !byte LD_LINE_H_ALT,1,5,5,96,13
+          !byte LD_LINE_H_ALT,1,8,5,96,13
+          !byte LD_LINE_H_ALT,1,11,5,96,13
+          !byte LD_LINE_H_ALT,1,14,5,96,13
+          !byte LD_LINE_H_ALT,1,17,5,96,13
+          !byte LD_LINE_H_ALT,1,20,5,96,13
+          
+          !byte LD_LINE_H_ALT,34,5,5,96,13
+          !byte LD_LINE_H_ALT,34,8,5,96,13
+          !byte LD_LINE_H_ALT,34,11,5,96,13
+          !byte LD_LINE_H_ALT,34,14,5,96,13
+          !byte LD_LINE_H_ALT,34,17,5,96,13
+          !byte LD_LINE_H_ALT,34,20,5,96,13
+          
+          !byte LD_LINE_V_ALT,6,8,11,128,9
+          !byte LD_LINE_V_ALT,33,8,11,128,9
+          
+          !byte LD_OBJECT,19,21,TYPE_PLAYER
+          !byte LD_OBJECT,15,5,TYPE_BAT_LR  
+          !byte LD_OBJECT,20,5,TYPE_BAT_LR  
+          !byte LD_OBJECT,25,5,TYPE_BAT_LR  
+          !byte LD_OBJECT,17,9,TYPE_BAT_LR  
+          !byte LD_OBJECT,23,9,TYPE_BAT_LR  
+          !byte LD_END
+
+LEVEL_8
+          !byte LD_LINE_H_ALT,1,5,5,96,13
+          !byte LD_LINE_H_ALT,10,5,20,96,13
+          !byte LD_LINE_H_ALT,34,5,5,96,13
+          !byte LD_LINE_H_ALT,1,8,5,96,13
+          !byte LD_LINE_H_ALT,10,8,20,96,13
+          !byte LD_LINE_H_ALT,34,8,5,96,13
+          !byte LD_LINE_V_ALT,10,6,3,2,13
+          !byte LD_LINE_V_ALT,16,6,3,2,13
+          !byte LD_LINE_V_ALT,23,6,3,2,13
+          !byte LD_LINE_V_ALT,29,6,3,2,13
+          !byte LD_LINE_H_ALT,5,11,7,96,13
+          !byte LD_LINE_H_ALT,28,11,7,96,13
+          !byte LD_LINE_H_ALT,10,14,20,96,13
+          !byte LD_LINE_H_ALT,5,17,7,96,13
+          !byte LD_LINE_H_ALT,28,17,7,96,13
+          !byte LD_LINE_H_ALT,10,20,20,96,13
+          !byte LD_OBJECT,19,21,TYPE_PLAYER
+          !byte LD_OBJECT,15,5,TYPE_BAT_LR  
+          !byte LD_OBJECT,20,5,TYPE_BAT_LR  
+          !byte LD_OBJECT,25,5,TYPE_BAT_LR  
+          !byte LD_OBJECT,17,9,TYPE_BAT_LR  
+          !byte LD_OBJECT,23,9,TYPE_BAT_LR  
+          !byte LD_END
+
 
 LEVEL_BORDER_DATA
           !byte LD_LINE_H_ALT,0,0,40,128,9
