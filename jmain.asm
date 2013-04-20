@@ -45,7 +45,7 @@ CIA_PRA                 = $dd00
 
 PROCESSOR_PORT          = $01
 
-START_LEVEL             = 32
+START_LEVEL             = 22
 
 MUSIC_IN_GAME_TUNE		    = $00
 MUSIC_TITLE_TUNE			     = $01
@@ -2838,20 +2838,8 @@ KillEnemy
           beq .NoEnemy
           
           dec NUMBER_ENEMIES_ALIVE
-
-          cpy #TYPE_BOSS3
-          bne +
-
-          ;undo beam
-          lda SPRITE_CHAR_POS_X,x
-          sta PARAM4
-          lda SPRITE_CHAR_POS_Y,x
-          sta PARAM5
-          jsr RestoreBeamHV
-
-+
-
-.NoEnemy  
+          
+.NoEnemy          
           lda #TYPE_EXPLOSION
           sta SPRITE_ACTIVE,x
           
@@ -3949,6 +3937,25 @@ ObjectControl
           ;does object exist?
           ldy SPRITE_ACTIVE,x
           beq .NextObject
+          
+          lda DELAYED_GENERIC_COUNTER
+          and #$03
+          bne +
+          
+          ;check if we're in water
+          ldy SPRITE_CHAR_POS_Y,x
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          lda SCREEN_BACK_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+          lda SPRITE_CHAR_POS_X,x
+          tay
+          lda (ZEROPAGE_POINTER_1),y
+          cmp #111
+          beq .NextObject
+          
++          
+          ldy SPRITE_ACTIVE,x
           
           ;enemy is active
           dey
@@ -6661,13 +6668,6 @@ CheckIsPlayerCollidingWithBeam
           rts
           
 .PlayerIsActive          
-          cmp #TYPE_PLAYER_DEAN
-          beq +
-          cmp #TYPE_PLAYER_SAM
-          beq +
-          rts
-          
-+          
           lda SPRITE_STATE,y
           cmp #128
           bcs .PlayerNotActive
@@ -6701,81 +6701,6 @@ CheckIsPlayerCollidingWithBeam
           sbc #2
           cmp SPRITE_CHAR_POS_Y,y
           beq .PlayerHit
-          
-          ;not hit
-          rts
-          
-.PlayerHit          
-          ;player killed
-          lda #129
-          sta SPRITE_STATE,y
-          
-          lda #SPRITE_PLAYER_DEAD
-          sta SPRITE_POINTER_BASE,y
-          
-          lda #0
-          sta SPRITE_MOVE_POS,y
-          
-          lda SPRITE_ACTIVE,y
-          cmp #TYPE_PLAYER_SAM
-          bne .PlayerWasDean
-          
-          ;reset Sam specific variables
-          lda #0
-          sta SPRITE_HELD
-          
-.PlayerWasDean          
-          rts
-
-
-;------------------------------------------------------------
-;check player vs. beam
-; beam boss index in x
-; player index in y
-; PARAM5 = beam start Y
-;------------------------------------------------------------
-!zone CheckIsPlayerCollidingWithBeamV
-CheckIsPlayerCollidingWithBeamV
-          lda SPRITE_ACTIVE,y
-          bne .PlayerIsActive
-.PlayerNotActive          
-          rts
-          
-.PlayerIsActive          
-          cmp #TYPE_PLAYER_DEAN
-          beq +
-          cmp #TYPE_PLAYER_SAM
-          beq +
-          rts
-          
-+          
-          lda SPRITE_STATE,y
-          cmp #128
-          bcs .PlayerNotActive
-          
-          ;compare char positions in x
-          lda SPRITE_CHAR_POS_X,x
-          cmp SPRITE_CHAR_POS_X,y
-          beq .XMatch
-          
-          clc
-          adc #1
-          cmp SPRITE_CHAR_POS_X,y
-          beq .XMatch
-          
-          sec
-          sbc #2
-          cmp SPRITE_CHAR_POS_X,y
-          beq .XMatch
-       
-          ;not hit
-          rts
-          
-.XMatch          
-          ;compare char positions in y
-          lda SPRITE_CHAR_POS_Y,x
-          cmp SPRITE_CHAR_POS_Y,y
-          bmi .PlayerHit
           
           ;not hit
           rts
@@ -7101,7 +7026,7 @@ DrawBeamH
 !zone DrawBeamV
 DrawBeamV
           ldy PARAM4
-          ldx PARAM5
+          ldx #1
           
 .NextLine          
           lda SCREEN_LINE_OFFSET_TABLE_LO,x
@@ -7145,8 +7070,9 @@ RestoreBeamHV
           sec
           sbc #( ( SCREEN_COLOR - SCREEN_BACK_COLOR ) >> 8 )
           sta ZEROPAGE_POINTER_4 + 1
-    
-          stx PARAM10
+          
+          stx PARAM6
+          
           ldy #1
           
 -
@@ -7189,7 +7115,7 @@ RestoreBeamHV
           cpx #22
           bne .NextLineR
 
-          ldx PARAM10
+          ldx PARAM6
           rts
 
 
@@ -7936,9 +7862,6 @@ BossFollowPlayerX
           
 ;------------------------------------------------------------
 ;boss 3
-;state 1 = shoot
-;state 128 = follow player
-;state 129 = shoot, hitback active
 ;------------------------------------------------------------
 !zone BehaviourBoss3
 BehaviourBoss3
@@ -7956,63 +7879,14 @@ BOSS_MOVE_SPEED = 1
           bne .NoHitBack
           
           ;make vulnerable again
-          lda SPRITE_STATE,x
-          cmp #129
-          bne .NoHitBack
+          ;lda SPRITE_STATE,x
+          ;cmp #128
+          ;bne .NoHitBack
           
-          lda #1
+          lda #0
           sta SPRITE_STATE,x
         
 .NoHitBack        
-          lda SPRITE_STATE,x
-          and #$7f
-          beq .FollowPlayer
-
-          ;shoot state
-          jmp .ShootDown
-          
-
-
-
-.FollowPlayer
-          ;above player?
-          txa
-          and #$01
-          tay
-          lda SPRITE_ACTIVE,y
-          cmp #TYPE_PLAYER_DEAN
-          beq .FoundPlayer
-          cmp #TYPE_PLAYER_SAM
-          beq .FoundPlayer
-          
-          ;check other player
-          tya
-          eor #1
-          tay
-          lda SPRITE_ACTIVE,y
-          cmp #TYPE_PLAYER_DEAN
-          beq .FoundPlayer
-          cmp #TYPE_PLAYER_SAM
-          beq .FoundPlayer
-          
-          ;no player to hunt
-          rts
-          
-.FoundPlayer
-          ;player index in y
-          lda SPRITE_CHAR_POS_X,y
-          cmp SPRITE_CHAR_POS_X,x
-          bne +
-
-          ;enter attack mode
-          lda #1
-          sta SPRITE_STATE,x
-          lda #0
-          sta SPRITE_MODE_POS,x
-          rts
-
-+
-
           lda DELAYED_GENERIC_COUNTER
           and #$01
           beq +
@@ -8054,22 +7928,28 @@ BOSS_MOVE_SPEED = 1
           
           
           
-.ShootDown          
+          
+          lda SPRITE_STATE,x
+          and #$7f
+          bne .NotFollowPlayer
+          jmp BossFollowPlayer
+          
+.NotFollowPlayer          
+          cmp #1
+          beq .AttackMode
+          rts
+          
+.AttackMode          
           ;Attack modes (more modes?)
-          inc SPRITE_ANNOYED,x
-          lda SPRITE_ANNOYED,x
+          inc SPRITE_MOVE_POS,x
+          lda SPRITE_MOVE_POS,x
           cmp #4
           beq .NextAttackStep
           rts
           
 .NextAttackStep
           lda #0
-          sta SPRITE_ANNOYED,x
-
-          lda SPRITE_CHAR_POS_X,x
-          sta PARAM4
-          lda SPRITE_CHAR_POS_Y,x
-          sta PARAM5
+          sta SPRITE_MOVE_POS,x
 
           inc SPRITE_MODE_POS,x
           
@@ -8081,9 +7961,9 @@ BOSS_MOVE_SPEED = 1
           
           ;does player hit beam?
           ldy #0
-          jsr CheckIsPlayerCollidingWithBeamV
+          jsr CheckIsPlayerCollidingWithBeam
           ldy #1
-          jsr CheckIsPlayerCollidingWithBeamV
+          jsr CheckIsPlayerCollidingWithBeam
           
 .BeamNotDangerous          
           lda SPRITE_MODE_POS,x
@@ -8125,7 +8005,39 @@ BOSS_MOVE_SPEED = 1
           beq .BeamEnd
           rts
           
-.HandleBeam
+.BeamStep1
+          ;beam
+          lda #BEAM_TYPE_DARK
+          jsr .DrawBeam
+          rts
+          
+.BeamStep2
+          ;beam
+          lda #BEAM_TYPE_MEDIUM
+          jsr .DrawBeam
+          rts
+          
+.BeamStep3
+          ;beam
+          lda #BEAM_TYPE_LIGHT
+          jsr .DrawBeam
+          rts
+          
+.BeamStep4
+          ;beam
+          lda #BEAM_TYPE_LIGHT2
+          jsr .DrawBeam
+          rts
+          
+.BeamEnd
+          jsr .RestoreBeam
+          
+          lda #0
+          sta SPRITE_STATE,x
+          rts
+          
+.DrawBeam
+          tay
           lda BEAM_CHAR_H,y
           sta PARAM1
           lda BEAM_CHAR_V,y
@@ -8133,38 +8045,121 @@ BOSS_MOVE_SPEED = 1
           lda BEAM_COLOR,y
           sta PARAM3
           
-          txa
-          pha
-          jsr DrawBeamV
-          pla
-          tax
-          rts
+          ldy SPRITE_CHAR_POS_Y,x
+          
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          sta ZEROPAGE_POINTER_2
+          lda SCREEN_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+          clc
+          adc #( ( SCREEN_COLOR - SCREEN_CHAR ) >> 8 )
+          sta ZEROPAGE_POINTER_2 + 1
+          
+          stx PARAM6
+          
+          ldy #1
+.HLoop          
+          lda PARAM1
+          sta (ZEROPAGE_POINTER_1),y
+          lda PARAM3
+          sta (ZEROPAGE_POINTER_2),y
+          iny
+          cpy #39
+          bne .HLoop
 
-.BeamStep1
-          ;beam
-          ldy #BEAM_TYPE_DARK
-          jmp .HandleBeam
+          ;vertical beam
+          ldy SPRITE_CHAR_POS_X,x
+          ldx #1
           
-.BeamStep2
-          ;beam
-          ldy #BEAM_TYPE_MEDIUM
-          jmp .HandleBeam
+.NextLine          
+          lda SCREEN_LINE_OFFSET_TABLE_LO,x
+          sta ZEROPAGE_POINTER_1
+          sta ZEROPAGE_POINTER_2
+          lda SCREEN_LINE_OFFSET_TABLE_HI,x
+          sta ZEROPAGE_POINTER_1 + 1
+          clc
+          adc #( ( SCREEN_COLOR - SCREEN_CHAR ) >> 8 )
+          sta ZEROPAGE_POINTER_2 + 1
           
-.BeamStep3
-          ;beam
-          ldy #BEAM_TYPE_LIGHT
-          jmp .HandleBeam
+          lda PARAM2
+          sta (ZEROPAGE_POINTER_1),y
+          lda PARAM3
+          sta (ZEROPAGE_POINTER_2),y
           
-.BeamStep4
-          ;beam
-          ldy #BEAM_TYPE_LIGHT2
-          jmp .HandleBeam
+          inx
+          cpx #22
+          bne .NextLine
+
+          ldx PARAM6
+          rts
           
-.BeamEnd
-          jsr RestoreBeamHV
+
+.RestoreBeam
+          ldy SPRITE_CHAR_POS_Y,x
           
-          lda #128
-          sta SPRITE_STATE,x
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          sta ZEROPAGE_POINTER_2
+          sta ZEROPAGE_POINTER_3
+          sta ZEROPAGE_POINTER_4
+          lda SCREEN_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+          sec
+          sbc #( ( SCREEN_CHAR - SCREEN_BACK_CHAR ) >> 8 )
+          sta ZEROPAGE_POINTER_2 + 1
+          clc
+          adc #( ( SCREEN_COLOR - SCREEN_BACK_CHAR ) >> 8 )
+          sta ZEROPAGE_POINTER_3 + 1
+          sec
+          sbc #( ( SCREEN_COLOR - SCREEN_BACK_COLOR ) >> 8 )
+          sta ZEROPAGE_POINTER_4 + 1
+          
+          stx PARAM6
+          
+          ldy #1
+          
+-
+          lda (ZEROPAGE_POINTER_2),y
+          sta (ZEROPAGE_POINTER_1),y
+          lda (ZEROPAGE_POINTER_4),y
+          sta (ZEROPAGE_POINTER_3),y
+          iny
+          cpy #39
+          bne -
+
+          ;vertical beam
+          ldy SPRITE_CHAR_POS_X,x
+          ldx #1
+          
+.NextLineR          
+          lda SCREEN_LINE_OFFSET_TABLE_LO,x
+          sta ZEROPAGE_POINTER_1
+          sta ZEROPAGE_POINTER_2
+          sta ZEROPAGE_POINTER_3
+          sta ZEROPAGE_POINTER_4
+          lda SCREEN_LINE_OFFSET_TABLE_HI,x
+          sta ZEROPAGE_POINTER_1 + 1
+          clc
+          adc #( ( SCREEN_BACK_CHAR - SCREEN_CHAR ) >> 8 )
+          sta ZEROPAGE_POINTER_2 + 1
+          clc
+          adc #( ( SCREEN_COLOR - SCREEN_BACK_CHAR ) >> 8 )
+          sta ZEROPAGE_POINTER_3 + 1
+          sec
+          sbc #( ( SCREEN_COLOR - SCREEN_BACK_COLOR ) >> 8 )
+          sta ZEROPAGE_POINTER_4 + 1
+
+          lda (ZEROPAGE_POINTER_2),y
+          sta (ZEROPAGE_POINTER_1),y
+          lda (ZEROPAGE_POINTER_4),y
+          sta (ZEROPAGE_POINTER_3),y
+          
+          inx
+          cpx #22
+          bne .NextLineR
+
+          ldx PARAM6
           rts
           
 ;------------------------------------------------------------
@@ -8279,9 +8274,6 @@ HitBehaviourHurt
 ;------------------------------------------------------------
 !zone HitBehaviourBoss
 HitBehaviourBoss
-          lda #8
-          sta SPRITE_HITBACK,x
-          
           ;boss switches tactic
           lda SPRITE_HP,x
           and #$01
@@ -8297,12 +8289,16 @@ HitBehaviourBoss
           sta SPRITE_MOVE_POS,x
           sta SPRITE_MOVE_POS_Y,x
           
-          rts
+          ;fall through
 
-!zone HitBehaviourBoss3
 HitBehaviourBoss3
           lda #8
           sta SPRITE_HITBACK,x
+          
+          ;make invincible for a short while
+          lda SPRITE_STATE,x
+          ora #$80
+          sta SPRITE_STATE,x
           rts
           
  
@@ -10955,7 +10951,7 @@ TYPE_START_STATE
           !byte 128           ;spawn
           !byte 0             ;boss
           !byte 0             ;boss2
-          !byte 128           ;boss3
+          !byte 0             ;boss3
           
 TYPE_START_DELTA_Y
           !byte 0     ;dummy
