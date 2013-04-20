@@ -864,6 +864,14 @@ DisplayScoreDisplay
           lda #1
           sta PLAYER_JOYSTICK_PORT + 1
           
+          ;set two player mode active flag
+          lda #0
+          sta TWO_PLAYER_MODE_ACTIVE
+          lda GAME_MODE
+          cmp #GT_COOP
+          bne +
+          inc TWO_PLAYER_MODE_ACTIVE
++          
           lda GAME_MODE
           cmp #GT_SINGLE_PLAYER_SAM
           bne .NoPortChange
@@ -2643,6 +2651,9 @@ IsEnemyCollidingWithPlayer
           jmp CheckForHighscore
           
 .OtherPlayerStillAlive
+          ;remove 2 player active flag
+          lda #0
+          sta TWO_PLAYER_MODE_ACTIVE
           jsr RemoveObject
           rts
           
@@ -2892,14 +2903,13 @@ PlayerControl
           dey
           ldx SPRITE_ACTIVE,y
           lda IS_TYPE_ENEMY,x
-          cmp #2
+          cmp #1
           bne .NormalHurtByForce
           
           ;in 2p mode?
           ;TODO - if only one player is left?
-          lda GAME_MODE
-          cmp #2
-          bne .NormalHurtByForce
+          lda TWO_PLAYER_MODE_ACTIVE
+          beq .NormalHurtByForce
           
           ;no further action
           jmp .NoEnemyHeld
@@ -3567,14 +3577,13 @@ FireShot
           ;is two player enemy?
           ldy SPRITE_ACTIVE,x
           lda IS_TYPE_ENEMY,y
-          cmp #2
+          cmp #1
           bne .HitEnemy
           
           ;in 2p mode?
           ;TODO - if only one player is left?
-          lda GAME_MODE
-          cmp #2
-          bne .HitEnemy
+          lda TWO_PLAYER_MODE_ACTIVE
+          beq .HitEnemy
           
           ldy SPRITE_HELD
           dey
@@ -3951,14 +3960,13 @@ SamUseForce
           dey
           ldx SPRITE_ACTIVE,y
           lda IS_TYPE_ENEMY,x
-          cmp #2
+          cmp #1
           bne .HitEnemy
           
           ;in 2p mode?
           ;TODO - if only one player is left?
-          lda GAME_MODE
-          cmp #2
-          bne .HitEnemy
+          lda TWO_PLAYER_MODE_ACTIVE
+          beq .HitEnemy
           
           ;no further action
           lda #1
@@ -14622,6 +14630,9 @@ BOSS_DELTA_TABLE_X
 BOSS_DELTA_TABLE_Y          
           !byte 0, $ff, 0, $ff, $ff, 0, $ff, 0
           !byte 0, 1, 0, 1, 1, 0, 1, 0
+          
+TWO_PLAYER_MODE_ACTIVE
+          !byte 0
           
 !source "level_data.asm"
 
