@@ -41,7 +41,7 @@ JOYSTICK_PORT_II        = $dc00
 
 CIA_PRA                 = $dd00
 
-START_LEVEL             = 0
+START_LEVEL             = 10
 
 
 ;placeholder for various temp parameters
@@ -3751,11 +3751,45 @@ ObjectControl
 BehaviourNone
           rts
 
+
+;------------------------------------------------------------
+;handles simple hitback
+;------------------------------------------------------------
+!zone HandleHitBack
+HandleHitBack
+          lda SPRITE_HITBACK,x
+          beq .NoHitBack
+
+          dec SPRITE_HITBACK,x
+          lda SPRITE_HITBACK_DIRECTION,x
+          beq .HitBackRight
+          
+          ;move left
+          jsr ObjectMoveLeftBlocking
+          lda #1
+          rts
+          
+.HitBackRight          
+          jsr ObjectMoveRightBlocking
+          lda #1
+          rts
+          
+.NoHitBack
+          lda #0
+          rts
+          
+
+
 ;------------------------------------------------------------
 ;simply move diagonal
 ;------------------------------------------------------------
 !zone BehaviourBatDiagonal
 BehaviourBatDiagonal
+          jsr HandleHitBack
+          beq .NoHitBack
+          rts
+          
+.NoHitBack          
           lda DELAYED_GENERIC_COUNTER
           and #$03
           bne .NoAnimUpdate
@@ -3928,19 +3962,8 @@ BehaviourBat8
 ;------------------------------------------------------------
 !zone BehaviourMummy
 BehaviourMummy
-          lda SPRITE_HITBACK,x
+          jsr HandleHitBack
           beq .NoHitBack
-
-          dec SPRITE_HITBACK,x
-          lda SPRITE_HITBACK_DIRECTION,x
-          beq .HitBackRight
-          
-          ;move left
-          jsr ObjectMoveLeftBlocking
-          rts
-          
-.HitBackRight          
-          jsr ObjectMoveRightBlocking
           rts
           
 .NoHitBack          
@@ -4035,21 +4058,9 @@ BehaviourMummy
 ;------------------------------------------------------------
 !zone BehaviourDevil
 BehaviourDevil
-          lda SPRITE_HITBACK,x
+          jsr HandleHitBack
           beq .NoHitBack
-
-          dec SPRITE_HITBACK,x
-          lda SPRITE_HITBACK_DIRECTION,x
-          beq .HitBackRight
-          
-          ;move left
-          jsr ObjectMoveLeftBlocking
           rts
-          
-.HitBackRight          
-          jsr ObjectMoveRightBlocking
-          rts
-          
 .NoHitBack          
           jsr ObjectMoveDownBlocking
           beq .NotFalling
@@ -4194,21 +4205,10 @@ BehaviourImpala
 ;------------------------------------------------------------
 !zone BehaviourZombie
 BehaviourZombie
-          lda SPRITE_HITBACK,x
+          jsr HandleHitBack
           beq .NoHitBack
+          rts
 
-          dec SPRITE_HITBACK,x
-          lda SPRITE_HITBACK_DIRECTION,x
-          beq .HitBackRight
-          
-          ;move left
-          jsr ObjectMoveLeftBlocking
-          rts
-          
-.HitBackRight          
-          jsr ObjectMoveRightBlocking
-          rts
-          
 .NoHitBack          
           lda SPRITE_JUMP_POS,x
           bne .IsJumping
@@ -4668,203 +4668,6 @@ BehaviourBatVanishing
           jmp HitBehaviourVanish
           
  
-;------------------------------------------------------------
-;ghost skeleton
-;------------------------------------------------------------
-!zone BehaviourGhostSkeleton
-BehaviourGhostSkeleton
-
-GHOST_MOVE_SPEED = 1
-
-          lda DELAYED_GENERIC_COUNTER
-          and #$03
-          bne .NoAnimUpdate
-          
-          inc SPRITE_ANIM_POS,x
-          lda SPRITE_ANIM_POS,x
-          and #$03
-          sta SPRITE_ANIM_POS,x
-          
-          tay
-          lda GHOST_SKELETON_ANIMATION_TABLE,y
-          sta SPRITE_POINTER_BASE,x
-          
-.NoAnimUpdate          
-          inc SPRITE_ANIM_DELAY,x
-          lda SPRITE_ANIM_DELAY,x
-          cmp #10
-          beq .DoCheckMove
-          jmp .DoGhostMove
-
-.DoCheckMove
-          lda #0
-          sta SPRITE_ANIM_DELAY,x
-          
-          txa
-          and #$01
-          tay
-          lda SPRITE_ACTIVE,y
-          cmp #TYPE_PLAYER_DEAN
-          beq .FoundPlayer
-          cmp #TYPE_PLAYER_SAM
-          beq .FoundPlayer
-          
-          ;check other player
-          tya
-          eor #1
-          tay
-          lda SPRITE_ACTIVE,y
-          cmp #TYPE_PLAYER_DEAN
-          beq .FoundPlayer
-          cmp #TYPE_PLAYER_SAM
-          beq .FoundPlayer
-          
-          ;no player to hunt
-          rts
-          
-.FoundPlayer
-          ;player index in y
-          lda SPRITE_CHAR_POS_X,y
-          cmp SPRITE_CHAR_POS_X,x
-          bpl .MoveRight
-          
-          ;move left
-          lda SPRITE_DIRECTION,x
-          bne .AlreadyLookingLeft
-          lda SPRITE_MOVE_POS,x
-          beq .TurnLNow
-          dec SPRITE_MOVE_POS,x
-          bne .CheckYNow
-          
-.TurnLNow          
-          ;turning now
-          lda #1
-          sta SPRITE_DIRECTION,x
-          jmp .CheckYNow
-          
-.AlreadyLookingLeft
-          lda SPRITE_MOVE_POS,x
-          cmp #GHOST_MOVE_SPEED
-          beq .CheckYNow
-          inc SPRITE_MOVE_POS,x
-          jmp .CheckYNow
-          
-.MoveRight   
-          lda SPRITE_DIRECTION,x
-          beq .AlreadyLookingRight
-          
-          lda SPRITE_MOVE_POS,x
-          beq .TurnRNow
-          dec SPRITE_MOVE_POS,x
-          bne .CheckYNow
-          
-          ;turning now
-.TurnRNow          
-          lda #0
-          sta SPRITE_DIRECTION,x
-          jmp .CheckYNow
-          
-.AlreadyLookingRight          
-          lda SPRITE_MOVE_POS,x
-          cmp #GHOST_MOVE_SPEED
-          beq .CheckYNow
-          inc SPRITE_MOVE_POS,x
-          jmp .CheckYNow
-          
-.CheckYNow
-          ;player index in y
-          lda SPRITE_CHAR_POS_Y,y
-          cmp SPRITE_CHAR_POS_Y,x
-          bpl .MoveDown
-          
-          ;move left
-          lda SPRITE_DIRECTION_Y,x
-          bne .AlreadyLookingUp
-          lda SPRITE_MOVE_POS_Y,x
-          beq .TurnUNow
-          dec SPRITE_MOVE_POS_Y,x
-          bne .DoGhostMove
-          
-.TurnUNow          
-          ;turning now
-          lda #1
-          sta SPRITE_DIRECTION_Y,x
-          jmp .DoGhostMove
-          
-.AlreadyLookingUp
-          lda SPRITE_MOVE_POS_Y,x
-          cmp #GHOST_MOVE_SPEED
-          beq .DoGhostMove
-          inc SPRITE_MOVE_POS_Y,x
-          jmp .DoGhostMove
-          
-.MoveDown
-          lda SPRITE_DIRECTION_Y,x
-          beq .AlreadyLookingDown
-          
-          lda SPRITE_MOVE_POS_Y,x
-          beq .TurnDNow
-          dec SPRITE_MOVE_POS_Y,x
-          bne .DoGhostMove
-          
-          ;turning now
-.TurnDNow          
-          lda #0
-          sta SPRITE_DIRECTION_Y,x
-          jmp .DoGhostMove
-          
-.AlreadyLookingDown
-          lda SPRITE_MOVE_POS_Y,x
-          cmp #GHOST_MOVE_SPEED
-          beq .DoGhostMove
-          inc SPRITE_MOVE_POS_Y,x
-          jmp .DoGhostMove
-
-.DoGhostMove
-          ;move X times
-          ldy SPRITE_MOVE_POS,x
-          sty PARAM4
-          beq .DoY
-          
-          lda SPRITE_DIRECTION,x
-          beq .DoRight
-.MoveLoopL
-          jsr ObjectMoveLeftBlocking
-          dec PARAM4
-          bne .MoveLoopL
-          jmp .DoY
-          
-.DoRight
-.MoveLoopR
-          jsr ObjectMoveRightBlocking
-          dec PARAM4
-          bne .MoveLoopR
-          
-.DoY          
-          ;move X times
-          ldy SPRITE_MOVE_POS_Y,x
-          sty PARAM4
-          beq .MoveDone
-          
-          lda SPRITE_DIRECTION_Y,x
-          beq .DoDown
-.MoveLoopU
-          jsr ObjectMoveUpBlocking
-          dec PARAM4
-          bne .MoveLoopU
-          jmp .MoveDone
-          
-.DoDown
-.MoveLoopD
-          jsr ObjectMoveDownBlockingNoPlatform
-          dec PARAM4
-          bne .MoveLoopD
-         
-.MoveDone         
-          rts
-
-          
- 
 ;place the data at a valid bitmap position, this avoids copying the data        
 * = $2000        
 ;TITLE_LOGO_BMP_DATA
@@ -5063,25 +4866,215 @@ MUSIC_PLAYER
 
 
 ;------------------------------------------------------------
+;ghost skeleton
+;------------------------------------------------------------
+!zone BehaviourGhostSkeleton
+BehaviourGhostSkeleton
+
+GHOST_MOVE_SPEED = 1
+        
+          jsr HandleHitBack
+          beq .NoHitBack
+          rts
+
+.NoHitBack
+          lda DELAYED_GENERIC_COUNTER
+          and #$03
+          bne .NoAnimUpdate
+          
+          inc SPRITE_ANIM_POS,x
+          lda SPRITE_ANIM_POS,x
+          and #$03
+          sta SPRITE_ANIM_POS,x
+          
+          tay
+          lda GHOST_SKELETON_ANIMATION_TABLE,y
+          sta SPRITE_POINTER_BASE,x
+          
+.NoAnimUpdate          
+          inc SPRITE_ANIM_DELAY,x
+          lda SPRITE_ANIM_DELAY,x
+          cmp #10
+          beq .DoCheckMove
+          jmp .DoGhostMove
+
+.DoCheckMove
+          lda #0
+          sta SPRITE_ANIM_DELAY,x
+          
+          txa
+          and #$01
+          tay
+          lda SPRITE_ACTIVE,y
+          cmp #TYPE_PLAYER_DEAN
+          beq .FoundPlayer
+          cmp #TYPE_PLAYER_SAM
+          beq .FoundPlayer
+          
+          ;check other player
+          tya
+          eor #1
+          tay
+          lda SPRITE_ACTIVE,y
+          cmp #TYPE_PLAYER_DEAN
+          beq .FoundPlayer
+          cmp #TYPE_PLAYER_SAM
+          beq .FoundPlayer
+          
+          ;no player to hunt
+          rts
+          
+.FoundPlayer
+          ;player index in y
+          lda SPRITE_CHAR_POS_X,y
+          cmp SPRITE_CHAR_POS_X,x
+          bpl .MoveRight
+          
+          ;move left
+          lda SPRITE_DIRECTION,x
+          bne .AlreadyLookingLeft
+          lda SPRITE_MOVE_POS,x
+          beq .TurnLNow
+          dec SPRITE_MOVE_POS,x
+          bne .CheckYNow
+          
+.TurnLNow          
+          ;turning now
+          lda #1
+          sta SPRITE_DIRECTION,x
+          jmp .CheckYNow
+          
+.AlreadyLookingLeft
+          lda SPRITE_MOVE_POS,x
+          cmp #GHOST_MOVE_SPEED
+          beq .CheckYNow
+          inc SPRITE_MOVE_POS,x
+          jmp .CheckYNow
+          
+.MoveRight   
+          lda SPRITE_DIRECTION,x
+          beq .AlreadyLookingRight
+          
+          lda SPRITE_MOVE_POS,x
+          beq .TurnRNow
+          dec SPRITE_MOVE_POS,x
+          bne .CheckYNow
+          
+          ;turning now
+.TurnRNow          
+          lda #0
+          sta SPRITE_DIRECTION,x
+          jmp .CheckYNow
+          
+.AlreadyLookingRight          
+          lda SPRITE_MOVE_POS,x
+          cmp #GHOST_MOVE_SPEED
+          beq .CheckYNow
+          inc SPRITE_MOVE_POS,x
+          jmp .CheckYNow
+          
+.CheckYNow
+          ;player index in y
+          lda SPRITE_CHAR_POS_Y,y
+          cmp SPRITE_CHAR_POS_Y,x
+          bpl .MoveDown
+          
+          ;move left
+          lda SPRITE_DIRECTION_Y,x
+          bne .AlreadyLookingUp
+          lda SPRITE_MOVE_POS_Y,x
+          beq .TurnUNow
+          dec SPRITE_MOVE_POS_Y,x
+          bne .DoGhostMove
+          
+.TurnUNow          
+          ;turning now
+          lda #1
+          sta SPRITE_DIRECTION_Y,x
+          jmp .DoGhostMove
+          
+.AlreadyLookingUp
+          lda SPRITE_MOVE_POS_Y,x
+          cmp #GHOST_MOVE_SPEED
+          beq .DoGhostMove
+          inc SPRITE_MOVE_POS_Y,x
+          jmp .DoGhostMove
+          
+.MoveDown
+          lda SPRITE_DIRECTION_Y,x
+          beq .AlreadyLookingDown
+          
+          lda SPRITE_MOVE_POS_Y,x
+          beq .TurnDNow
+          dec SPRITE_MOVE_POS_Y,x
+          bne .DoGhostMove
+          
+          ;turning now
+.TurnDNow          
+          lda #0
+          sta SPRITE_DIRECTION_Y,x
+          jmp .DoGhostMove
+          
+.AlreadyLookingDown
+          lda SPRITE_MOVE_POS_Y,x
+          cmp #GHOST_MOVE_SPEED
+          beq .DoGhostMove
+          inc SPRITE_MOVE_POS_Y,x
+          jmp .DoGhostMove
+
+.DoGhostMove
+          ;move X times
+          ldy SPRITE_MOVE_POS,x
+          sty PARAM4
+          beq .DoY
+          
+          lda SPRITE_DIRECTION,x
+          beq .DoRight
+.MoveLoopL
+          jsr ObjectMoveLeftBlocking
+          dec PARAM4
+          bne .MoveLoopL
+          jmp .DoY
+          
+.DoRight
+.MoveLoopR
+          jsr ObjectMoveRightBlocking
+          dec PARAM4
+          bne .MoveLoopR
+          
+.DoY          
+          ;move X times
+          ldy SPRITE_MOVE_POS_Y,x
+          sty PARAM4
+          beq .MoveDone
+          
+          lda SPRITE_DIRECTION_Y,x
+          beq .DoDown
+.MoveLoopU
+          jsr ObjectMoveUpBlocking
+          dec PARAM4
+          bne .MoveLoopU
+          jmp .MoveDone
+          
+.DoDown
+.MoveLoopD
+          jsr ObjectMoveDownBlockingNoPlatform
+          dec PARAM4
+          bne .MoveLoopD
+         
+.MoveDone         
+          rts
+
+          
+ 
+;------------------------------------------------------------
 ;jumping toad
 ;------------------------------------------------------------
 !zone BehaviourJumpingToad
 BehaviourJumpingToad
-          lda SPRITE_HITBACK,x
+          jsr HandleHitBack
           beq .NoHitBack
-
-          dec SPRITE_HITBACK,x
-          lda SPRITE_HITBACK_DIRECTION,x
-          beq .HitBackRight
-          
-          ;move left
-          jsr ObjectMoveLeftBlocking
           rts
-          
-.HitBackRight          
-          jsr ObjectMoveRightBlocking
-          rts
-          
 .NoHitBack          
           lda SPRITE_STATE,x
           beq .NotDucking
@@ -5187,21 +5180,10 @@ BehaviourJumpingToad
 ;------------------------------------------------------------
 !zone BehaviourSpider
 BehaviourSpider
-          lda SPRITE_HITBACK,x
+          jsr HandleHitBack
           beq .NoHitBack
+          rts
 
-          dec SPRITE_HITBACK,x
-          lda SPRITE_HITBACK_DIRECTION,x
-          beq .HitBackRight
-          
-          ;move left
-          jsr ObjectMoveLeftBlocking
-          rts
-          
-.HitBackRight          
-          jsr ObjectMoveRightBlocking
-          rts
-          
 .NoHitBack          
           ;animate spider
           inc SPRITE_ANIM_DELAY,x
@@ -5305,19 +5287,8 @@ BehaviourSpider
 ;------------------------------------------------------------
 !zone BehaviourFrankenstein
 BehaviourFrankenstein
-          lda SPRITE_HITBACK,x
+          jsr HandleHitBack
           beq .NoHitBack
-
-          dec SPRITE_HITBACK,x
-          lda SPRITE_HITBACK_DIRECTION,x
-          beq .HitBackRight
-          
-          ;move left
-          jsr ObjectMoveLeftBlocking
-          rts
-          
-.HitBackRight          
-          jsr ObjectMoveRightBlocking
           rts
           
 .NoHitBack          
@@ -5751,6 +5722,11 @@ BehaviourFly
 ;------------------------------------------------------------
 !zone BehaviourFloatingGhost
 BehaviourFloatingGhost
+          jsr HandleHitBack
+          beq .NoHitBack
+          rts
+          
+.NoHitBack          
           lda SPRITE_STATE,x
           cmp #128
           beq .Vanish1
@@ -5793,6 +5769,7 @@ BehaviourFloatingGhost
           lda DELAYED_GENERIC_COUNTER
           and #$07
           bne .NoSpecialBehaviour
+
 
           lda #SPRITE_FLOATING_GHOST_1
           sta SPRITE_POINTER_BASE,x
@@ -5970,19 +5947,8 @@ BehaviourFloatingGhost
 ;------------------------------------------------------------
 !zone BehaviourSlime
 BehaviourSlime
-          lda SPRITE_HITBACK,x
+          jsr HandleHitBack
           beq .NoHitBack
-
-          dec SPRITE_HITBACK,x
-          lda SPRITE_HITBACK_DIRECTION,x
-          beq .HitBackRight
-          
-          ;move left
-          jsr ObjectMoveLeftBlocking
-          rts
-          
-.HitBackRight          
-          jsr ObjectMoveRightBlocking
           rts
           
 .NoHitBack          
@@ -6148,19 +6114,8 @@ BehaviourSlime
 ;------------------------------------------------------------
 !zone BehaviourWolf
 BehaviourWolf
-          lda SPRITE_HITBACK,x
+          jsr HandleHitBack
           beq .NoHitBack
-
-          dec SPRITE_HITBACK,x
-          lda SPRITE_HITBACK_DIRECTION,x
-          beq .HitBackRight
-          
-          ;move left
-          jsr ObjectMoveLeftBlocking
-          rts
-          
-.HitBackRight          
-          jsr ObjectMoveRightBlocking
           rts
           
 .NoHitBack          
@@ -6276,6 +6231,11 @@ BehaviourWolf
 ;------------------------------------------------------------
 !zone BehaviourEye
 BehaviourEye
+          jsr HandleHitBack
+          beq .NoHitBack
+          rts
+          
+.NoHitBack          
           lda DELAYED_GENERIC_COUNTER
           and #$03
           bne .NoAnimUpdate
@@ -9023,16 +8983,16 @@ TYPE_START_DELTA_Y
           !byte 0     ;spider
           !byte 0     ;explosion
           !byte 0     ;player sam
-          !byte 0     ;wolf
+          !byte 2     ;wolf
           !byte 0     ;ghost skeleton
-          !byte 0     ;jumping toad
+          !byte 2     ;jumping toad
           !byte 0     ;eye
           !byte 0     ;floating ghost
           !byte 0     ;fly
-          !byte 0     ;slime
+          !byte 2     ;slime
           !byte 2     ;frankenstein
-          !byte 0     ;hand
-          !byte 0     ;devil
+          !byte 2     ;hand
+          !byte 2     ;devil
           !byte 0     ;impala 1
           !byte 0     ;impala 2
           !byte 0     ;impala 3
