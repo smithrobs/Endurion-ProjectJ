@@ -128,7 +128,10 @@ SPRITE_WOLF_JUMP_L            = SPRITE_BASE + 50
 SPRITE_PLAYER_SAM_STAND_R     = SPRITE_BASE + 51
 SPRITE_PLAYER_SAM_STAND_L     = SPRITE_BASE + 52
 
-SPRITE_PLAYER_DEAD            = SPRITE_BASE + 53
+SPRITE_FLY_1                  = SPRITE_BASE + 53
+SPRITE_FLY_2                  = SPRITE_BASE + 54
+
+SPRITE_PLAYER_DEAD            = SPRITE_BASE + 87
 
 SPRITE_PLAYER_SAM_WALK_R_1    = SPRITE_BASE + 55
 SPRITE_PLAYER_SAM_WALK_L_1    = SPRITE_BASE + 56
@@ -167,6 +170,10 @@ SPRITE_WOLF_WALK_R_1          = SPRITE_BASE + 80
 SPRITE_WOLF_WALK_R_2          = SPRITE_BASE + 81
 SPRITE_WOLF_WALK_R_3          = SPRITE_BASE + 82
 SPRITE_WOLF_JUMP_R            = SPRITE_BASE + 83
+
+SPRITE_FLOATING_GHOST_1       = SPRITE_BASE + 84
+SPRITE_FLOATING_GHOST_2       = SPRITE_BASE + 85
+SPRITE_FLOATING_GHOST_3       = SPRITE_BASE + 86
 
 SPRITE_EYE_1                  = SPRITE_BASE + 112
 SPRITE_EYE_2                  = SPRITE_BASE + 113
@@ -217,6 +224,9 @@ TYPE_WOLFMAN            = 11
 TYPE_GHOST_SKELETON     = 12
 TYPE_JUMPING_TOAD       = 13
 TYPE_EYE                = 14
+TYPE_FLOATING_GHOST     = 15
+TYPE_FLY                = 16
+
 
 OBJECT_HEIGHT           = 8 * 2
 
@@ -549,7 +559,7 @@ StartGame
           ;setup level
           jsr StartLevel
           
-          lda #16
+          lda #17
           sta LEVEL_NR
           jsr BuildScreen
           
@@ -1562,7 +1572,7 @@ IsEnemyCollidingWithPlayer
 .RestartPlayer          
           lda SPRITE_ACTIVE,x
           cmp #TYPE_PLAYER_SAM
-          bne .PlayerIsNotDean
+          beq .PlayerIsNotDean
           
           ;refill shells
           ldy #0
@@ -3352,6 +3362,73 @@ ObjectMoveDownBlocking
           
 
 ;------------------------------------------------------------
+;move object down if not blocked
+;x = object index
+;------------------------------------------------------------
+!zone ObjectMoveDownBlockingNoPlatform
+ObjectMoveDownBlockingNoPlatform
+          
+          lda SPRITE_CHAR_POS_Y_DELTA,x
+          beq .CheckCanMoveDown
+          
+.CanMoveDown
+          inc SPRITE_CHAR_POS_Y_DELTA,x
+          
+          lda SPRITE_CHAR_POS_Y_DELTA,x
+          cmp #8
+          bne .NoCharStep
+          
+          lda #0
+          sta SPRITE_CHAR_POS_Y_DELTA,x
+          inc SPRITE_CHAR_POS_Y,x
+          
+.NoCharStep          
+          jsr MoveSpriteDown
+          lda #1
+          rts
+          
+.CheckCanMoveDown
+          lda SPRITE_CHAR_POS_X_DELTA,x
+          beq .NoSecondCharCheckNeeded
+          
+          ldy SPRITE_CHAR_POS_Y,x
+          iny
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          lda SCREEN_BACK_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+
+          ldy SPRITE_CHAR_POS_X,x
+          iny
+          lda (ZEROPAGE_POINTER_1),y
+          
+          jsr IsCharBlocking
+          bne .BlockedDown
+          
+.NoSecondCharCheckNeeded          
+
+          ldy SPRITE_CHAR_POS_Y,x
+          iny
+          lda SCREEN_LINE_OFFSET_TABLE_LO,y
+          sta ZEROPAGE_POINTER_1
+          lda SCREEN_BACK_LINE_OFFSET_TABLE_HI,y
+          sta ZEROPAGE_POINTER_1 + 1
+          
+          ldy SPRITE_CHAR_POS_X,x
+          
+          lda (ZEROPAGE_POINTER_1),y
+          
+          jsr IsCharBlocking
+          bne .BlockedDown
+          
+          jmp .CanMoveDown
+          
+.BlockedDown
+          lda #0
+          rts
+          
+
+;------------------------------------------------------------
 ;move object down
 ;x = object index
 ;------------------------------------------------------------
@@ -4177,6 +4254,9 @@ BehaviourBatVanishing
 ;------------------------------------------------------------
 !zone BehaviourGhostSkeleton
 BehaviourGhostSkeleton
+
+GHOST_MOVE_SPEED = 1
+
           lda DELAYED_GENERIC_COUNTER
           and #$03
           bne .NoAnimUpdate
@@ -4191,11 +4271,178 @@ BehaviourGhostSkeleton
           sta SPRITE_POINTER_BASE,x
           
 .NoAnimUpdate          
-.NormalUpdate          
-          ;doesn't do anything yet
+          inc SPRITE_ANIM_DELAY,x
+          lda SPRITE_ANIM_DELAY,x
+          cmp #10
+          beq .DoCheckMove
+          jmp .DoGhostMove
+
+.DoCheckMove
+          lda #0
+          sta SPRITE_ANIM_DELAY,x
+          
+          txa
+          and #$01
+          tay
+          lda SPRITE_ACTIVE,y
+          cmp #TYPE_PLAYER_DEAN
+          beq .FoundPlayer
+          cmp #TYPE_PLAYER_SAM
+          beq .FoundPlayer
+          
+          ;check other player
+          tya
+          eor #1
+          tay
+          lda SPRITE_ACTIVE,y
+          cmp #TYPE_PLAYER_DEAN
+          beq .FoundPlayer
+          cmp #TYPE_PLAYER_SAM
+          beq .FoundPlayer
+          
+          ;no player to hunt
           rts
 
+.FoundPlayer
+          ;player index in y
+          lda SPRITE_CHAR_POS_X,y
+          cmp SPRITE_CHAR_POS_X,x
+          bpl .MoveRight
+          
+          ;move left
+          lda SPRITE_DIRECTION,x
+          bne .AlreadyLookingLeft
+          lda SPRITE_MOVE_POS,x
+          beq .TurnLNow
+          dec SPRITE_MOVE_POS,x
+          bne .CheckYNow
+          
+.TurnLNow          
+          ;turning now
+          lda #1
+          sta SPRITE_DIRECTION,x
+          jmp .CheckYNow
+          
+.AlreadyLookingLeft
+          lda SPRITE_MOVE_POS,x
+          cmp #GHOST_MOVE_SPEED
+          beq .CheckYNow
+          inc SPRITE_MOVE_POS,x
+          jmp .CheckYNow
+          
+.MoveRight   
+          lda SPRITE_DIRECTION,x
+          beq .AlreadyLookingRight
+          
+          lda SPRITE_MOVE_POS,x
+          beq .TurnRNow
+          dec SPRITE_MOVE_POS,x
+          bne .CheckYNow
+          
+          ;turning now
+.TurnRNow          
+          lda #0
+          sta SPRITE_DIRECTION,x
+          jmp .CheckYNow
+          
+.AlreadyLookingRight          
+          lda SPRITE_MOVE_POS,x
+          cmp #GHOST_MOVE_SPEED
+          beq .CheckYNow
+          inc SPRITE_MOVE_POS,x
+          jmp .CheckYNow
+          
+.CheckYNow
+          ;player index in y
+          lda SPRITE_CHAR_POS_Y,y
+          cmp SPRITE_CHAR_POS_Y,x
+          bpl .MoveDown
+          
+          ;move left
+          lda SPRITE_DIRECTION_Y,x
+          bne .AlreadyLookingUp
+          lda SPRITE_MOVE_POS_Y,x
+          beq .TurnUNow
+          dec SPRITE_MOVE_POS_Y,x
+          bne .DoGhostMove
+          
+.TurnUNow          
+          ;turning now
+          lda #1
+          sta SPRITE_DIRECTION_Y,x
+          jmp .DoGhostMove
+          
+.AlreadyLookingUp
+          lda SPRITE_MOVE_POS_Y,x
+          cmp #GHOST_MOVE_SPEED
+          beq .DoGhostMove
+          inc SPRITE_MOVE_POS_Y,x
+          jmp .DoGhostMove
+          
+.MoveDown
+          lda SPRITE_DIRECTION_Y,x
+          beq .AlreadyLookingDown
+          
+          lda SPRITE_MOVE_POS_Y,x
+          beq .TurnDNow
+          dec SPRITE_MOVE_POS_Y,x
+          bne .DoGhostMove
+          
+          ;turning now
+.TurnDNow          
+          lda #0
+          sta SPRITE_DIRECTION_Y,x
+          jmp .DoGhostMove
+          
+.AlreadyLookingDown
+          lda SPRITE_MOVE_POS_Y,x
+          cmp #GHOST_MOVE_SPEED
+          beq .DoGhostMove
+          inc SPRITE_MOVE_POS_Y,x
+          jmp .DoGhostMove
 
+.DoGhostMove
+          ;move X times
+          ldy SPRITE_MOVE_POS,x
+          sty PARAM4
+          beq .DoY
+          
+          lda SPRITE_DIRECTION,x
+          beq .DoRight
+.MoveLoopL
+          jsr ObjectMoveLeftBlocking
+          dec PARAM4
+          bne .MoveLoopL
+          jmp .DoY
+          
+.DoRight
+.MoveLoopR
+          jsr ObjectMoveRightBlocking
+          dec PARAM4
+          bne .MoveLoopR
+          
+.DoY          
+          ;move X times
+          ldy SPRITE_MOVE_POS_Y,x
+          sty PARAM4
+          beq .MoveDone
+          
+          lda SPRITE_DIRECTION_Y,x
+          beq .DoDown
+.MoveLoopU
+          jsr ObjectMoveUpBlocking
+          dec PARAM4
+          bne .MoveLoopU
+          jmp .MoveDone
+          
+.DoDown
+.MoveLoopD
+          jsr ObjectMoveDownBlockingNoPlatform
+          dec PARAM4
+          bne .MoveLoopD
+
+.MoveDone         
+          rts
 
 ;------------------------------------------------------------
 ;jumping toad
@@ -4429,386 +4676,6 @@ BehaviourSpider
           jmp .MoveStep
           
  
-;------------------------------------------------------------
-;run left/right, jump off directional
-;------------------------------------------------------------
-!zone BehaviourWolf
-BehaviourWolf
-          lda SPRITE_HITBACK,x
-          beq .NoHitBack
-
-          dec SPRITE_HITBACK,x
-          lda SPRITE_HITBACK_DIRECTION,x
-          beq .HitBackRight
-          
-          ;move left
-          jsr ObjectMoveLeftBlocking
-          rts
-          
-.HitBackRight          
-          jsr ObjectMoveRightBlocking
-          rts
-          
-.NoHitBack          
-          ;animate wolf
-          lda SPRITE_JUMP_POS,x
-          bne .NoAnimUpdate
-          
-          inc SPRITE_ANIM_DELAY,x
-          lda SPRITE_ANIM_DELAY,x
-          cmp #4
-          bne .NoAnimUpdate
-          
-          lda #0
-          sta SPRITE_ANIM_DELAY,x
-          
-          inc SPRITE_ANIM_POS,x
-          lda SPRITE_ANIM_POS,x
-          and #$03
-          sta SPRITE_ANIM_POS,x
-          
-          tay
-          lda SPRITE_DIRECTION,x
-          beq .FacingLeft
-          
-          lda WOLF_ANIMATION_TABLE,y
-          sta SPRITE_POINTER_BASE,x
-          jmp .NoAnimUpdate
-          
-.FacingLeft          
-          lda WOLF_ANIMATION_TABLE,y
-          clc
-          adc #( SPRITE_WOLF_WALK_R_1 - SPRITE_WOLF_WALK_L_1 )
-          sta SPRITE_POINTER_BASE,x
-          
-.NoAnimUpdate          
-          lda SPRITE_JUMP_POS,x
-          bne .NoFallHandling
-          
-          jsr UpdateSpriteFall
-          sta SPRITE_FALLING,x
-          
-          bne .IsFalling
-          
-          ;neither jumping nor falling
-          jsr GenerateRandomNumber
-          and #$0f
-          cmp SPRITE_ANNOYED,x
-          bpl .IsFalling
-          
-          ;random jump
-          jmp .Jumping
-          
-.IsFalling          
-.NoFallHandling
-
-          lda SPRITE_ANNOYED,x
-          clc
-          adc #2
-          sta PARAM6
-.MoveStep
-          dec PARAM6
-          beq .MoveDone
-
-          lda SPRITE_DIRECTION,x
-          beq .MoveRight
-          
-          ;move left
-          lda SPRITE_JUMP_POS,x
-          ora SPRITE_FALLING,x
-          bne .OnlyMoveLeft
-          
-          jsr ObjectWalkOrJumpLeft
-          beq .ToggleDirection
-          jmp .MoveStep
-
-.MoveDone
-          lda SPRITE_JUMP_POS,x
-          beq .NotJumping
-          
-.Jumping          
-          jsr UpdateSpriteJump
-.NotJumping          
-          rts
-          
-.OnlyMoveLeft
-          jsr ObjectMoveLeftBlocking
-          beq .ToggleDirection
-          jmp .MoveStep
-          
-.MoveRight
-          lda SPRITE_JUMP_POS,x
-          ora SPRITE_FALLING,x
-          bne .OnlyMoveRight
-          
-          jsr ObjectWalkOrJumpRight
-          beq .ToggleDirection
-          jmp .MoveStep
-
-.OnlyMoveRight
-          jsr ObjectMoveRightBlocking
-          beq .ToggleDirection
-          jmp .MoveStep
-
-.ToggleDirection
-          lda SPRITE_DIRECTION,x
-          eor #1
-          sta SPRITE_DIRECTION,x
-          jmp .MoveStep
-          
- 
-;------------------------------------------------------------
-;simply move diagonal
-;------------------------------------------------------------
-!zone BehaviourEye
-BehaviourEye
-          lda DELAYED_GENERIC_COUNTER
-          and #$03
-          bne .NoAnimUpdate
-          
-          ;inc SPRITE_ANIM_POS,x
-          ;lda SPRITE_ANIM_POS,x
-          ;and #$03
-          ;sta SPRITE_ANIM_POS,x
-          
-          ;tay
-          ;lda BAT_ANIMATION,y
-          ;sta SPRITE_POINTER_BASE,x
-          
-.NoAnimUpdate          
-          lda SPRITE_STATE,x
-          beq .Move
-          cmp #1
-          beq .EyeOpen
-          cmp #2
-          beq .EyeIsOpen
-          
-          ;eye closes
-          inc SPRITE_ANIM_DELAY,x
-          lda SPRITE_ANIM_DELAY,x
-          cmp #3
-          bne .NoActionNow
-
-          lda #0
-          sta SPRITE_ANIM_DELAY,x
-          
-          ;close animation
-          dec SPRITE_ANIM_POS,x
-          dec SPRITE_POINTER_BASE,x
-          
-          ldy SPRITE_ANIM_POS,x
-          lda EYE_COLOR_TABLE,y
-          sta VIC_SPRITE_COLOR,x
-          
-          cpy #0
-          bne .NoActionNow
-          
-          ;can move again
-          lda #0
-          sta SPRITE_STATE,x
-          rts
-          
-          
-.EyeOpen
-          inc SPRITE_ANIM_DELAY,x
-          lda SPRITE_ANIM_DELAY,x
-          cmp #3
-          bne .NoActionNow
-
-          lda #0
-          sta SPRITE_ANIM_DELAY,x
-
-          ;open animation
-          inc SPRITE_ANIM_POS,x
-          inc SPRITE_POINTER_BASE,x
-          
-          ldy SPRITE_ANIM_POS,x
-          lda EYE_COLOR_TABLE,y
-          sta VIC_SPRITE_COLOR,x
-          
-          cpy #3
-          bne .NoActionNow
-          
-          ;now wait
-          inc SPRITE_STATE,x
-          rts
-          
-.EyeIsOpen
-          inc SPRITE_ANIM_DELAY,x
-          lda SPRITE_ANIM_DELAY,x
-          cmp #30
-          beq .EyeCloseNow
-          
-.NoActionNow          
-          rts
-          
-.EyeCloseNow
-          lda #3
-          sta SPRITE_STATE,x
-          lda #0
-          sta SPRITE_ANIM_DELAY,x
-          rts
-          
-.Move
-          jsr GenerateRandomNumber
-          cmp #7
-          bne .MoveNow
-          
-          ;start blinking
-          lda #1
-          sta SPRITE_STATE,x
-          rts
-
-.MoveNow
-          lda SPRITE_DIRECTION,x
-          beq .MoveRight
-          
-          ;move left
-          jsr ObjectMoveLeftBlocking
-          beq .ToggleDirection
-          jmp .MoveY
-          
-.MoveRight
-          jsr ObjectMoveRightBlocking
-          beq .ToggleDirection
-          jmp .MoveY
-          
-.ToggleDirection
-          lda SPRITE_DIRECTION,x
-          eor #1
-          sta SPRITE_DIRECTION,x
-          
-.MoveY
-          lda SPRITE_DIRECTION_Y,x
-          beq .MoveDown
-          
-          ;move up
-          jsr ObjectMoveUpBlocking
-          beq .ToggleDirectionY
-          rts
-          
-.MoveDown
-          jsr ObjectMoveDownBlocking
-          beq .ToggleDirectionY
-          rts
-          
-.ToggleDirectionY
-          lda SPRITE_DIRECTION_Y,x
-          eor #1
-          sta SPRITE_DIRECTION_Y,x
-          rts
- 
- 
-;------------------------------------------------------------
-;explosion
-;------------------------------------------------------------
-!zone BehaviourExplosion
-BehaviourExplosion
-          jsr MoveSpriteUp
-          
-          inc SPRITE_ANIM_DELAY,x
-          lda SPRITE_ANIM_DELAY,x
-          cmp #3
-          beq .UpdateAnimation
-          rts
-          
-.UpdateAnimation          
-          lda #0
-          sta SPRITE_ANIM_DELAY,x
-          
-          inc SPRITE_ANIM_POS,x
-          lda SPRITE_ANIM_POS,x
-          cmp #8
-          beq .ExplosionDone
-         
-          inc SPRITE_POINTER_BASE,x
-          rts
-          
-
-.ExplosionDone
-          jsr RemoveObject
-          rts
-          
-
-;------------------------------------------------------------
-;determins if object is looking at player
-;X = sprite index
-;returns 1 if looking at player, 0 if not
-;------------------------------------------------------------
-!zone LookingAtPlayer
-LookingAtPlayer
-          lda SPRITE_DIRECTION,x
-          beq .LookingRight
-
-          lda SPRITE_CHAR_POS_X,x
-          cmp SPRITE_CHAR_POS_X
-          bpl .LookingAtPlayer
-          jmp .NoPlayerInSight
-
-.LookingRight
-          lda SPRITE_CHAR_POS_X,x
-          cmp SPRITE_CHAR_POS_X
-          bmi .LookingAtPlayer
-          jmp .NoPlayerInSight
-          
-.LookingAtPlayer
-          lda #1
-          rts
- 
-.NoPlayerInSight
-          lda #0
-          rts
-
-;------------------------------------------------------------
-;hit behaviour getting hurt
-;------------------------------------------------------------
-!zone HitBehaviourHurt
-HitBehaviourHurt
-          lda #8
-          sta SPRITE_HITBACK,x
-
-          ;hitback dir determined from player dir (equal shot dir)          
-          lda SPRITE_DIRECTION
-          sta SPRITE_HITBACK_DIRECTION,x
-          
-          inc SPRITE_ANNOYED,x
-          
-          ldy SPRITE_ACTIVE,x
-          lda TYPE_ANNOYED_COLOR,y
-          sta VIC_SPRITE_COLOR,x
-          rts
-          
- 
-;------------------------------------------------------------
-;hit behaviour getting hurt and turn towards the player
-;------------------------------------------------------------
-!zone HitBehaviourHurtTurn
-HitBehaviourHurtTurn
-          lda #8
-          sta SPRITE_HITBACK,x
-
-          ;hitback dir determined from player dir (equal shot dir)          
-          lda SPRITE_DIRECTION
-          sta SPRITE_HITBACK_DIRECTION,x
-          
-          ;looking at the player?
-          jsr LookingAtPlayer
-          bne .AlreadySeeingPlayer
-          
-          ;turn around
-          lda SPRITE_DIRECTION,x
-          eor #$01
-          sta SPRITE_DIRECTION,x
-          
-.AlreadySeeingPlayer          
-          inc SPRITE_ANNOYED,x
-          
-          ldy SPRITE_ACTIVE,x
-          lda TYPE_ANNOYED_COLOR,y
-          sta VIC_SPRITE_COLOR,x
-          rts
-          
- 
 ;place the data at a valid bitmap position, this avoids copying the data        
 * = $2000        
 TITLE_LOGO_BMP_DATA
@@ -5005,6 +4872,719 @@ TITLE_LOGO_SCREEN_CHAR
 MUSIC_PLAYER
 !binary "gt2music.bin"
 
+;------------------------------------------------------------
+;floating ghost
+;------------------------------------------------------------
+!zone BehaviourFloatingGhost
+BehaviourFloatingGhost
+          lda SPRITE_STATE,x
+          cmp #128
+          beq .Vanish1
+          cmp #129
+          beq .Hidden
+          cmp #130
+          beq .Spawn
+          cmp #131
+          beq .SpawnWait
+          jmp .AttackFlight
+          
+.NoSpecialBehaviour          
+          rts
+          
+.SpawnWait          
+          inc SPRITE_ANIM_DELAY,x
+          lda SPRITE_ANIM_DELAY,x
+          cmp #20
+          bne .NoSpecialBehaviour
+          
+          lda #0
+          sta SPRITE_STATE,x
+          rts
+          
+.Vanish1
+          lda DELAYED_GENERIC_COUNTER
+          and #$07
+          bne .NoSpecialBehaviour
+          
+          lda #SPRITE_INVISIBLE
+          sta SPRITE_POINTER_BASE,x
+          
+          inc SPRITE_STATE,x
+          jsr GenerateRandomNumber
+          adc #24
+          sta SPRITE_MOVE_POS,x
+          rts
+          
+.Spawn          
+          lda DELAYED_GENERIC_COUNTER
+          and #$07
+          bne .NoSpecialBehaviour
+
+          lda #SPRITE_FLOATING_GHOST_1
+          sta SPRITE_POINTER_BASE,x
+          
+          lda #0
+          sta SPRITE_ANIM_DELAY,x
+          
+          inc SPRITE_STATE,x
+          rts
+
+.Hidden
+          dec SPRITE_MOVE_POS,x
+          beq .Unhide
+          rts
+          
+.Unhide
+
+          ;position diagonal above/below player
+          lda SPRITE_CHAR_POS_X
+          cmp #10
+          bcc .SpawnOnRight
+          cmp #30
+          bcs .SpawnOnLeft
+          
+          ;randomly choose
+          jsr GenerateRandomNumber
+          and #$01
+          beq .SpawnOnRight
+          
+          
+.SpawnOnLeft
+          lda SPRITE_CHAR_POS_X
+          sec
+          sbc #5
+          sta PARAM1
+          
+          lda #0
+          sta SPRITE_DIRECTION,x
+          jmp .FindYSpawnPos
+
+          
+.SpawnOnRight          
+          lda SPRITE_CHAR_POS_X
+          clc
+          adc #5
+          sta PARAM1
+
+          lda #1
+          sta SPRITE_DIRECTION,x
+
+.FindYSpawnPos
+          lda SPRITE_CHAR_POS_Y
+          cmp #5
+          bcc .SpawnBelow
+          cmp #15
+          bcs .SpawnAbove
+          
+          ;randomly choose
+          jsr GenerateRandomNumber
+          and #$01
+          beq .SpawnAbove
+
+.SpawnBelow         
+          lda SPRITE_CHAR_POS_Y
+          clc
+          adc #5
+          sta PARAM2
+          
+          lda #0
+          sta SPRITE_FALLING,x
+          jmp .Reposition
+
+.SpawnAbove
+          lda SPRITE_CHAR_POS_Y
+          sec
+          sbc #5
+          sta PARAM2
+
+          lda #1
+          sta SPRITE_FALLING,x
+          
+.Reposition
+          jsr CalcSpritePosFromCharPos
+          
+          inc SPRITE_STATE,x
+          
+          lda #SPRITE_BAT_VANISH
+          sta SPRITE_POINTER_BASE,x
+          rts
+
+.AnimateBat
+          lda DELAYED_GENERIC_COUNTER
+          and #$03
+          bne .NoAnimUpdate
+          
+          inc SPRITE_ANIM_POS,x
+          lda SPRITE_ANIM_POS,x
+          and #$03
+          sta SPRITE_ANIM_POS,x
+          
+          tay
+          lda FLOATING_GHOST_ANIMATION_TABLE,y
+          sta SPRITE_POINTER_BASE,x
+.NoAnimUpdate          
+          rts
+          
+.AttackFlight
+          inc SPRITE_MOVE_POS,x
+          lda SPRITE_MOVE_POS,x
+          cmp #80
+          beq .AttackDone
+          cmp #40
+          beq .ChangeFlyDirection
+          
+          ;fly towards player
+          lda SPRITE_DIRECTION,x
+          beq .FlyRight
+          
+          stx PARAM5
+          jsr ObjectMoveLeft
+          jmp .FlyUpDown
+          
+.FlyRight
+          stx PARAM5
+          jsr ObjectMoveRight
+          
+.FlyUpDown          
+          ldx PARAM5
+          lda SPRITE_FALLING,x
+          beq .FlyUp
+          
+          jsr ObjectMoveDown
+          jmp .AnimateBat
+          
+.FlyUp
+          jsr ObjectMoveUp
+          jmp .AnimateBat
+          
+.ChangeFlyDirection
+          ;change direction to avoid flying out of the screen
+          lda SPRITE_CHAR_POS_Y,x
+          cmp #5
+          bcc .ChangeY
+          cmp #18
+          bcc .CheckXDir
+          
+.ChangeY
+          lda SPRITE_FALLING,x
+          eor #$01
+          sta SPRITE_FALLING,x
+          
+.CheckXDir          
+          lda SPRITE_CHAR_POS_X,x
+          cmp #5
+          bcc .ChangeX
+          cmp #32
+          bcs .ChangeX
+          rts
+          
+.ChangeX
+          lda SPRITE_DIRECTION,x
+          eor #$01
+          sta SPRITE_DIRECTION,x
+          rts
+
+.AttackDone
+          ;auto-vanish
+          lda #0
+          sta SPRITE_STATE,x
+          jmp HitBehaviourVanish
+          
+ 
+;------------------------------------------------------------
+;move randomly diagonal
+;------------------------------------------------------------
+!zone BehaviourFly
+BehaviourFly
+          lda DELAYED_GENERIC_COUNTER
+          and #$01
+          bne .NoAnimUpdate
+          
+          lda SPRITE_ANIM_POS,x
+          eor #1
+          sta SPRITE_ANIM_POS,x
+          
+          clc
+          adc #SPRITE_FLY_1
+          sta SPRITE_POINTER_BASE,x
+          
+.NoAnimUpdate          
+          lda SPRITE_STATE,x
+          beq .Move
+
+          dec SPRITE_MOVE_POS,x
+          bne .NoAction
+          
+          ;can move again
+          dec SPRITE_STATE,x
+          
+          jsr GenerateRandomNumber
+          sta SPRITE_MOVE_POS,x
+          
+          jsr GenerateRandomNumber
+          and #$03
+          cmp #3
+          bne .ValueOK
+          
+          lda #2
+.ValueOK          
+          sta SPRITE_DIRECTION,x
+
+          jsr GenerateRandomNumber
+          and #$03
+          cmp #3
+          bne .ValueOK2
+          
+          lda #2
+.ValueOK2
+          sta SPRITE_DIRECTION_Y,x
+
+.NoAction          
+          rts
+          
+.Move
+          dec SPRITE_MOVE_POS,x
+          bne .CanMove
+          
+          ;wait
+          jsr GenerateRandomNumber
+          sta SPRITE_MOVE_POS,x
+          
+          inc SPRITE_STATE,x
+          rts
+          
+.CanMove          
+          lda SPRITE_DIRECTION,x
+          beq .MoveRight
+          cmp #2
+          beq .MoveY
+          
+          ;move left
+          jsr ObjectMoveLeftBlocking
+          beq .ToggleDirection
+          jmp .MoveY
+          
+.MoveRight
+          jsr ObjectMoveRightBlocking
+          beq .ToggleDirection
+          jmp .MoveY
+          
+.ToggleDirection
+          lda SPRITE_DIRECTION,x
+          eor #1
+          sta SPRITE_DIRECTION,x
+          
+.MoveY
+          lda SPRITE_DIRECTION_Y,x
+          beq .MoveDown
+          cmp #2
+          beq .NoYMovement
+          
+          ;move up
+          jsr ObjectMoveUpBlocking
+          beq .ToggleDirectionY
+          rts
+          
+.MoveDown
+          jsr ObjectMoveDownBlockingNoPlatform
+          beq .ToggleDirectionY
+          
+.NoYMovement          
+          rts
+          
+.ToggleDirectionY
+          lda SPRITE_DIRECTION_Y,x
+          eor #1
+          sta SPRITE_DIRECTION_Y,x
+          rts
+ 
+ 
+
+;------------------------------------------------------------
+;run left/right, jump off directional
+;------------------------------------------------------------
+!zone BehaviourWolf
+BehaviourWolf
+          lda SPRITE_HITBACK,x
+          beq .NoHitBack
+
+          dec SPRITE_HITBACK,x
+          lda SPRITE_HITBACK_DIRECTION,x
+          beq .HitBackRight
+          
+          ;move left
+          jsr ObjectMoveLeftBlocking
+          rts
+          
+.HitBackRight          
+          jsr ObjectMoveRightBlocking
+          rts
+          
+.NoHitBack          
+          ;animate wolf
+          lda SPRITE_JUMP_POS,x
+          bne .NoAnimUpdate
+          
+          inc SPRITE_ANIM_DELAY,x
+          lda SPRITE_ANIM_DELAY,x
+          cmp #4
+          bne .NoAnimUpdate
+          
+          lda #0
+          sta SPRITE_ANIM_DELAY,x
+          
+          inc SPRITE_ANIM_POS,x
+          lda SPRITE_ANIM_POS,x
+          and #$03
+          sta SPRITE_ANIM_POS,x
+          
+          tay
+          lda SPRITE_DIRECTION,x
+          beq .FacingLeft
+          
+          lda WOLF_ANIMATION_TABLE,y
+          sta SPRITE_POINTER_BASE,x
+          jmp .NoAnimUpdate
+          
+.FacingLeft          
+          lda WOLF_ANIMATION_TABLE,y
+          clc
+          adc #( SPRITE_WOLF_WALK_R_1 - SPRITE_WOLF_WALK_L_1 )
+          sta SPRITE_POINTER_BASE,x
+          
+.NoAnimUpdate          
+          lda SPRITE_JUMP_POS,x
+          bne .NoFallHandling
+          
+          jsr UpdateSpriteFall
+          sta SPRITE_FALLING,x
+          
+          bne .IsFalling
+          
+          ;neither jumping nor falling
+          jsr GenerateRandomNumber
+          and #$0f
+          cmp SPRITE_ANNOYED,x
+          bpl .IsFalling
+          
+          ;random jump
+          jmp .Jumping
+          
+.IsFalling          
+.NoFallHandling
+
+          lda SPRITE_ANNOYED,x
+          clc
+          adc #2
+          sta PARAM6
+.MoveStep
+          dec PARAM6
+          beq .MoveDone
+
+          lda SPRITE_DIRECTION,x
+          beq .MoveRight
+          
+          ;move left
+          lda SPRITE_JUMP_POS,x
+          ora SPRITE_FALLING,x
+          bne .OnlyMoveLeft
+          
+          jsr ObjectWalkOrJumpLeft
+          beq .ToggleDirection
+          jmp .MoveStep
+
+.MoveDone
+          lda SPRITE_JUMP_POS,x
+          beq .NotJumping
+          
+.Jumping          
+          jsr UpdateSpriteJump
+.NotJumping          
+          rts
+          
+.OnlyMoveLeft
+          jsr ObjectMoveLeftBlocking
+          beq .ToggleDirection
+          jmp .MoveStep
+          
+.MoveRight
+          lda SPRITE_JUMP_POS,x
+          ora SPRITE_FALLING,x
+          bne .OnlyMoveRight
+          
+          jsr ObjectWalkOrJumpRight
+          beq .ToggleDirection
+          jmp .MoveStep
+
+.OnlyMoveRight
+          jsr ObjectMoveRightBlocking
+          beq .ToggleDirection
+          jmp .MoveStep
+
+.ToggleDirection
+          lda SPRITE_DIRECTION,x
+          eor #1
+          sta SPRITE_DIRECTION,x
+          jmp .MoveStep
+          
+ 
+
+;------------------------------------------------------------
+;simply move diagonal
+;------------------------------------------------------------
+!zone BehaviourEye
+BehaviourEye
+          lda DELAYED_GENERIC_COUNTER
+          and #$03
+          bne .NoAnimUpdate
+          
+          ;inc SPRITE_ANIM_POS,x
+          ;lda SPRITE_ANIM_POS,x
+          ;and #$03
+          ;sta SPRITE_ANIM_POS,x
+          
+          ;tay
+          ;lda BAT_ANIMATION,y
+          ;sta SPRITE_POINTER_BASE,x
+          
+.NoAnimUpdate          
+          lda SPRITE_STATE,x
+          beq .Move
+          cmp #1
+          beq .EyeOpen
+          cmp #2
+          beq .EyeIsOpen
+          
+          ;eye closes
+          inc SPRITE_ANIM_DELAY,x
+          lda SPRITE_ANIM_DELAY,x
+          cmp #3
+          bne .NoActionNow
+
+          lda #0
+          sta SPRITE_ANIM_DELAY,x
+          
+          ;close animation
+          dec SPRITE_ANIM_POS,x
+          dec SPRITE_POINTER_BASE,x
+          
+          ldy SPRITE_ANIM_POS,x
+          lda EYE_COLOR_TABLE,y
+          sta VIC_SPRITE_COLOR,x
+          
+          cpy #0
+          bne .NoActionNow
+          
+          ;can move again
+          lda #0
+          sta SPRITE_STATE,x
+          rts
+          
+          
+.EyeOpen
+          inc SPRITE_ANIM_DELAY,x
+          lda SPRITE_ANIM_DELAY,x
+          cmp #3
+          bne .NoActionNow
+
+          lda #0
+          sta SPRITE_ANIM_DELAY,x
+
+          ;open animation
+          inc SPRITE_ANIM_POS,x
+          inc SPRITE_POINTER_BASE,x
+          
+          ldy SPRITE_ANIM_POS,x
+          lda EYE_COLOR_TABLE,y
+          sta VIC_SPRITE_COLOR,x
+          
+          cpy #3
+          bne .NoActionNow
+          
+          ;now wait
+          inc SPRITE_STATE,x
+          rts
+          
+.EyeIsOpen
+          inc SPRITE_ANIM_DELAY,x
+          lda SPRITE_ANIM_DELAY,x
+          cmp #30
+          beq .EyeCloseNow
+          
+.NoActionNow          
+          rts
+          
+.EyeCloseNow
+          lda #3
+          sta SPRITE_STATE,x
+          lda #0
+          sta SPRITE_ANIM_DELAY,x
+          rts
+          
+.Move
+          jsr GenerateRandomNumber
+          cmp #7
+          bne .MoveNow
+          
+          ;start blinking
+          lda #1
+          sta SPRITE_STATE,x
+          rts
+
+.MoveNow
+          lda SPRITE_DIRECTION,x
+          beq .MoveRight
+          
+          ;move left
+          jsr ObjectMoveLeftBlocking
+          beq .ToggleDirection
+          jmp .MoveY
+          
+.MoveRight
+          jsr ObjectMoveRightBlocking
+          beq .ToggleDirection
+          jmp .MoveY
+          
+.ToggleDirection
+          lda SPRITE_DIRECTION,x
+          eor #1
+          sta SPRITE_DIRECTION,x
+          
+.MoveY
+          lda SPRITE_DIRECTION_Y,x
+          beq .MoveDown
+          
+          ;move up
+          jsr ObjectMoveUpBlocking
+          beq .ToggleDirectionY
+          rts
+          
+.MoveDown
+          jsr ObjectMoveDownBlocking
+          beq .ToggleDirectionY
+          rts
+          
+.ToggleDirectionY
+          lda SPRITE_DIRECTION_Y,x
+          eor #1
+          sta SPRITE_DIRECTION_Y,x
+          rts
+ 
+ 
+
+;------------------------------------------------------------
+;explosion
+;------------------------------------------------------------
+!zone BehaviourExplosion
+BehaviourExplosion
+          jsr MoveSpriteUp
+          
+          inc SPRITE_ANIM_DELAY,x
+          lda SPRITE_ANIM_DELAY,x
+          cmp #3
+          beq .UpdateAnimation
+          rts
+          
+.UpdateAnimation          
+          lda #0
+          sta SPRITE_ANIM_DELAY,x
+          
+          inc SPRITE_ANIM_POS,x
+          lda SPRITE_ANIM_POS,x
+          cmp #8
+          beq .ExplosionDone
+         
+          inc SPRITE_POINTER_BASE,x
+          rts
+          
+
+.ExplosionDone
+          jsr RemoveObject
+          rts
+          
+
+
+;------------------------------------------------------------
+;determins if object is looking at player
+;X = sprite index
+;returns 1 if looking at player, 0 if not
+;------------------------------------------------------------
+!zone LookingAtPlayer
+LookingAtPlayer
+          lda SPRITE_DIRECTION,x
+          beq .LookingRight
+
+          lda SPRITE_CHAR_POS_X,x
+          cmp SPRITE_CHAR_POS_X
+          bpl .LookingAtPlayer
+          jmp .NoPlayerInSight
+
+.LookingRight
+          lda SPRITE_CHAR_POS_X,x
+          cmp SPRITE_CHAR_POS_X
+          bmi .LookingAtPlayer
+          jmp .NoPlayerInSight
+          
+.LookingAtPlayer
+          lda #1
+          rts
+ 
+.NoPlayerInSight
+          lda #0
+          rts
+
+
+;------------------------------------------------------------
+;hit behaviour getting hurt
+;------------------------------------------------------------
+!zone HitBehaviourHurt
+HitBehaviourHurt
+          lda #8
+          sta SPRITE_HITBACK,x
+
+          ;hitback dir determined from player dir (equal shot dir)          
+          lda SPRITE_DIRECTION
+          sta SPRITE_HITBACK_DIRECTION,x
+          
+          inc SPRITE_ANNOYED,x
+          
+          ldy SPRITE_ACTIVE,x
+          lda TYPE_ANNOYED_COLOR,y
+          sta VIC_SPRITE_COLOR,x
+          rts
+          
+ 
+
+;------------------------------------------------------------
+;hit behaviour getting hurt and turn towards the player
+;------------------------------------------------------------
+!zone HitBehaviourHurtTurn
+HitBehaviourHurtTurn
+          lda #8
+          sta SPRITE_HITBACK,x
+
+          ;hitback dir determined from player dir (equal shot dir)          
+          lda SPRITE_DIRECTION
+          sta SPRITE_HITBACK_DIRECTION,x
+          
+          ;looking at the player?
+          jsr LookingAtPlayer
+          bne .AlreadySeeingPlayer
+          
+          ;turn around
+          lda SPRITE_DIRECTION,x
+          eor #$01
+          sta SPRITE_DIRECTION,x
+          
+.AlreadySeeingPlayer          
+          inc SPRITE_ANNOYED,x
+          
+          ldy SPRITE_ACTIVE,x
+          lda TYPE_ANNOYED_COLOR,y
+          sta VIC_SPRITE_COLOR,x
+          rts
+          
+ 
 
 ;------------------------------------------------------------
 ;hit behaviour crumbling (zombie)
@@ -5626,16 +6206,37 @@ SpawnObject
           sta SPRITE_ANIM_POS,x
           sta SPRITE_ANIM_DELAY,x
           sta SPRITE_MOVE_POS,x
-          sta SPRITE_STATE,x
+          sta SPRITE_MOVE_POS_Y,x
           sta SPRITE_ANNOYED,x
           sta SPRITE_HITBACK,x
           
+          lda TYPE_START_STATE,y
+          sta SPRITE_STATE,x
+          
           ;use start direction
           lda TYPE_START_DIRECTION,y
+          and #$10
+          beq .NoRandomMovePos
+          
+          jsr GenerateRandomNumber
+          sta SPRITE_MOVE_POS,x
+          
+.NoRandomMovePos          
+          lda TYPE_START_DIRECTION,y
           and #$03
+          cmp #3
+          beq .RandomLeftRightNothing
           cmp #2
           bne .SetDirX
+          jmp .RandomLeftRight
           
+.RandomLeftRightNothing
+          jsr GenerateRandomNumber
+          and #$03
+          cmp #2
+          beq .SetDirX
+          
+.RandomLeftRight          
           jsr GenerateRandomNumber
           and #$01
 .SetDirX
@@ -5645,9 +6246,19 @@ SpawnObject
           and #%00001100
           lsr
           lsr
+          cmp #3
+          beq .RandomUpDownNothing
           cmp #2
           bne .SetDirY
+          jmp .RandomUpDown
           
+.RandomUpDownNothing
+          jsr GenerateRandomNumber
+          and #$03
+          cmp #2
+          beq .SetDirY
+          
+.RandomUpDown          
           jsr GenerateRandomNumber
           and #$01
 .SetDirY
@@ -5661,8 +6272,6 @@ SpawnObject
           inc NUMBER_ENEMIES_ALIVE
           
 .NoEnemy
-          
-.NoFreeSlot                    
           rts
 
 
@@ -6740,6 +7349,8 @@ SPRITE_ANIM_DELAY
           !byte 0,0,0,0,0,0,0,0
 SPRITE_MOVE_POS
           !byte 0,0,0,0,0,0,0,0
+SPRITE_MOVE_POS_Y
+          !byte 0,0,0,0,0,0,0,0
 SPRITE_STATE
           !byte 0,0,0,0,0,0,0,0
 SPRITE_ANNOYED
@@ -6789,6 +7400,9 @@ ENEMY_BEHAVIOUR_TABLE_LO
           !byte <BehaviourGhostSkeleton
           !byte <BehaviourJumpingToad
           !byte <BehaviourEye
+          !byte <BehaviourFloatingGhost
+          !byte <BehaviourFly
+
           
 ENEMY_BEHAVIOUR_TABLE_HI
           !byte >PlayerControl
@@ -6805,6 +7419,9 @@ ENEMY_BEHAVIOUR_TABLE_HI
           !byte >BehaviourGhostSkeleton
           !byte >BehaviourJumpingToad
           !byte >BehaviourEye
+          !byte >BehaviourFloatingGhost
+          !byte >BehaviourFly
+
           
 ;behaviour for an enemy being hit          
 ENEMY_HIT_BEHAVIOUR_TABLE_LO          
@@ -6821,6 +7438,9 @@ ENEMY_HIT_BEHAVIOUR_TABLE_LO
           !byte <HitBehaviourHurt     ;ghost skeleton
           !byte <HitBehaviourHurt     ;jumping toad
           !byte <HitBehaviourHurt     ;eye
+          !byte <HitBehaviourHurt     ;floating ghost
+          !byte <HitBehaviourHurt     ;fly
+
           
 ENEMY_HIT_BEHAVIOUR_TABLE_HI
           !byte >HitBehaviourHurt     ;bat diagonal
@@ -6836,6 +7456,9 @@ ENEMY_HIT_BEHAVIOUR_TABLE_HI
           !byte >HitBehaviourHurt     ;ghost skeleton
           !byte >HitBehaviourHurt     ;jumping toad
           !byte >HitBehaviourHurt     ;eye
+          !byte >HitBehaviourHurt     ;floating ghost
+          !byte >HitBehaviourHurt     ;fly
+
           
 IS_TYPE_ENEMY
           !byte 0     ;dummy entry for inactive object
@@ -6853,6 +7476,9 @@ IS_TYPE_ENEMY
           !byte 1     ;ghost skeleton
           !byte 1     ;jumping toad
           !byte 1     ;eye
+          !byte 1     ;floating ghost
+          !byte 1     ;fly
+
           
 TYPE_START_SPRITE
           !byte 0     ;dummy entry for inactive object
@@ -6870,6 +7496,9 @@ TYPE_START_SPRITE
           !byte SPRITE_GHOST_SKELETON_1
           !byte SPRITE_JUMPING_TOAD_1
           !byte SPRITE_EYE_1
+          !byte SPRITE_INVISIBLE
+          !byte SPRITE_FLY_1
+
           
 TYPE_START_COLOR
           !byte 0
@@ -6887,6 +7516,9 @@ TYPE_START_COLOR
           !byte 3     ;ghost skeleton
           !byte 5     ;jumping toad
           !byte 1     ;eye
+          !byte 13    ;floating ghost
+          !byte 3     ;fly
+
           
 TYPE_START_MULTICOLOR
           !byte 0     ;dummy
@@ -6904,6 +7536,9 @@ TYPE_START_MULTICOLOR
           !byte 1     ;ghost skeleton
           !byte 1     ;jumping toad
           !byte 1     ;eye
+          !byte 1     ;floating ghost
+          !byte 1     ;fly
+
           
 TYPE_START_HP
           !byte 0     ;dummy
@@ -6921,6 +7556,9 @@ TYPE_START_HP
           !byte 3     ;ghost skeleton
           !byte 3     ;jumping toad
           !byte 2     ;eye
+          !byte 5     ;floating ghost
+          !byte 1     ;fly
+
           
 TYPE_ANNOYED_COLOR
           !byte 0     ;dummy
@@ -6938,18 +7576,26 @@ TYPE_ANNOYED_COLOR
           !byte 3     ;ghost skeleton
           !byte 5     ;jumping toad
           !byte 5     ;eye
+          !byte 13    ;floating ghost
+          !byte 3     ;fly
+
           
           
 ;enemy start direction, 2 bits per dir.
-;        NNNNyyxx
-;              xx: start direction in x
-;              00: move right
-;              01: move left
-;              02: random left or right
+;        NNNmyyxx
+;              xx : start direction in x
+;              00 : move right
+;              01 : move left
+;              02 : random left or right
+;              03 : random left, right or nothing
 ;            yy   : start direction in y
 ;            00   : move down
 ;            01   : move up
 ;            02   : random up or down
+;            03   : random up, down or nothing
+;           m     : init movepos
+;           0     :   with 0
+;           1     :   with random
 TYPE_START_DIRECTION
           !byte 0             ;dummy
           !byte 0             ;player
@@ -6966,6 +7612,29 @@ TYPE_START_DIRECTION
           !byte 0             ;ghost skeleton
           !byte %00000010     ;jumping toad
           !byte %00001010     ;eye
+          !byte %00011010     ;floating ghost
+          !byte %00011111     ;fly
+
+
+TYPE_START_STATE
+          !byte 0             ;dummy
+          !byte 0             ;player
+          !byte 0             ;bat diag.
+          !byte 0             ;bat up/ down
+          !byte 0             ;bat 8
+          !byte 0             ;mummy
+          !byte 0             ;zombie
+          !byte 0             ;bat vanish
+          !byte 0             ;spider
+          !byte 0             ;explosion
+          !byte 0             ;player sam
+          !byte 0             ;wolf
+          !byte 0             ;ghost skeleton
+          !byte 0             ;jumping toad
+          !byte 0             ;eye
+          !byte 129           ;floating ghost
+          !byte 0             ;fly
+
           
 BAT_ANIMATION
           !byte SPRITE_BAT_1
@@ -7003,6 +7672,13 @@ EYE_COLOR_TABLE
           !byte 7
           !byte 13
           !byte 5
+
+FLOATING_GHOST_ANIMATION_TABLE
+          !byte SPRITE_FLOATING_GHOST_1
+          !byte SPRITE_FLOATING_GHOST_2
+          !byte SPRITE_FLOATING_GHOST_3
+          !byte SPRITE_FLOATING_GHOST_2
+          
 
 PATH_8_DX
           !byte $86
@@ -7225,6 +7901,9 @@ SCREEN_DATA_TABLE
           !word LEVEL_15
           !word LEVEL_16
           !word LEVEL_17
+          !word LEVEL_18
+          !word LEVEL_19
+
           !word 0
           
 LEVEL_1
@@ -7495,16 +8174,24 @@ LEVEL_14
           !byte LD_END
 
 LEVEL_15
-          !byte LD_LINE_H,1,10,18,160,13
-          !byte LD_LINE_H,1,13,18,160,13
-          !byte LD_LINE_H,1,16,18,160,13
-          !byte LD_LINE_H,1,19,18,160,13
-          !byte LD_LINE_H,22,10,18,160,13
-          !byte LD_LINE_H,22,13,18,160,13
-          !byte LD_LINE_H,22,16,18,160,13
-          !byte LD_LINE_H,22,19,18,160,13
-          !byte LD_OBJECT,30,15,TYPE_PLAYER_DEAN
-          !byte LD_OBJECT,10,15,TYPE_PLAYER_SAM
+          !byte LD_LINE_H,4,10,5,160,13
+          !byte LD_LINE_H,4,13,5,160,13
+          !byte LD_LINE_H,4,16,5,160,13
+          !byte LD_LINE_H,4,19,5,160,13
+          !byte LD_LINE_H,12,10,5,160,13
+          !byte LD_LINE_H,12,13,5,160,13
+          !byte LD_LINE_H,12,16,5,160,13
+          !byte LD_LINE_H,12,19,5,160,13
+          !byte LD_LINE_H,23,10,5,160,13
+          !byte LD_LINE_H,23,13,5,160,13
+          !byte LD_LINE_H,23,16,5,160,13
+          !byte LD_LINE_H,23,19,5,160,13
+          !byte LD_LINE_H,30,10,5,160,13
+          !byte LD_LINE_H,30,13,5,160,13
+          !byte LD_LINE_H,30,16,5,160,13
+          !byte LD_LINE_H,30,19,5,160,13
+          !byte LD_OBJECT,22,15,TYPE_PLAYER_DEAN
+          !byte LD_OBJECT,17,15,TYPE_PLAYER_SAM
           !byte LD_OBJECT,9,11,TYPE_GHOST_SKELETON
           !byte LD_OBJECT,30,11,TYPE_GHOST_SKELETON
           !byte LD_OBJECT,9,17,TYPE_GHOST_SKELETON
@@ -7563,6 +8250,59 @@ LEVEL_17
           !byte LD_OBJECT,17,9,TYPE_EYE  
           !byte LD_OBJECT,23,9,TYPE_EYE  
           !byte LD_END
+
+LEVEL_18
+          !byte LD_LINE_H_ALT,1,5,5,160,13
+          !byte LD_LINE_H_ALT,10,5,20,160,13
+          !byte LD_LINE_H_ALT,34,5,5,160,13
+          !byte LD_LINE_H_ALT,1,8,5,160,13
+          !byte LD_LINE_H_ALT,10,8,20,160,13
+          !byte LD_LINE_H_ALT,34,8,5,160,13
+          !byte LD_LINE_V_ALT,10,6,3,2,13
+          !byte LD_LINE_V_ALT,16,6,3,2,13
+          !byte LD_LINE_V_ALT,23,6,3,2,13
+          !byte LD_LINE_V_ALT,29,6,3,2,13
+          !byte LD_LINE_H_ALT,5,11,7,160,13
+          !byte LD_LINE_H_ALT,28,11,7,160,13
+          !byte LD_LINE_H_ALT,10,14,20,160,13
+          !byte LD_LINE_H_ALT,5,17,7,160,13
+          !byte LD_LINE_H_ALT,28,17,7,160,13
+          !byte LD_LINE_H_ALT,10,20,20,160,13
+          !byte LD_OBJECT,19,21,TYPE_PLAYER_DEAN
+          !byte LD_OBJECT,21,21,TYPE_PLAYER_SAM
+          !byte LD_OBJECT,15,5,TYPE_FLOATING_GHOST
+          !byte LD_OBJECT,20,5,TYPE_FLOATING_GHOST
+          !byte LD_OBJECT,25,5,TYPE_FLOATING_GHOST  
+          !byte LD_OBJECT,17,9,TYPE_FLOATING_GHOST  
+          !byte LD_OBJECT,23,9,TYPE_FLOATING_GHOST  
+          !byte LD_END
+
+LEVEL_19
+          !byte LD_LINE_H_ALT,1,5,5,160,13
+          !byte LD_LINE_H_ALT,10,5,20,160,13
+          !byte LD_LINE_H_ALT,34,5,5,160,13
+          !byte LD_LINE_H_ALT,1,8,5,160,13
+          !byte LD_LINE_H_ALT,10,8,20,160,13
+          !byte LD_LINE_H_ALT,34,8,5,160,13
+          !byte LD_LINE_V_ALT,10,6,3,2,13
+          !byte LD_LINE_V_ALT,16,6,3,2,13
+          !byte LD_LINE_V_ALT,23,6,3,2,13
+          !byte LD_LINE_V_ALT,29,6,3,2,13
+          !byte LD_LINE_H_ALT,5,11,7,160,13
+          !byte LD_LINE_H_ALT,28,11,7,160,13
+          !byte LD_LINE_H_ALT,10,14,20,160,13
+          !byte LD_LINE_H_ALT,5,17,7,160,13
+          !byte LD_LINE_H_ALT,28,17,7,160,13
+          !byte LD_LINE_H_ALT,10,20,20,160,13
+          !byte LD_OBJECT,19,21,TYPE_PLAYER_DEAN
+          !byte LD_OBJECT,21,21,TYPE_PLAYER_SAM
+          !byte LD_OBJECT,15,5,TYPE_FLY
+          !byte LD_OBJECT,20,5,TYPE_FLY
+          !byte LD_OBJECT,25,5,TYPE_FLY  
+          !byte LD_OBJECT,17,9,TYPE_FLY  
+          !byte LD_OBJECT,23,9,TYPE_FLY  
+          !byte LD_END
+
 
 
 LEVEL_BORDER_DATA
