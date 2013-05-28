@@ -431,10 +431,6 @@ BEAM_TYPE_LIGHT2        = 3
           ;since we turn ROMs off this would result in crashes if we didn't
           sei
           
-          ;save old configuration
-          lda PROCESSOR_PORT
-          sta PARAM1
-          
           ;only RAM
           ;to copy under the IO rom
           lda #%00110000
@@ -874,6 +870,15 @@ TitleScreenWithoutIRQ
           lda #2
           sta PLAYER_SHELLS
           sta PLAYER_SHELLS_MAX
+          lda #48
+          sta PLAYER_SCORE
+          sta PLAYER_SCORE + 1
+          sta PLAYER_SCORE + 2
+          sta PLAYER_SCORE + 3
+          sta PLAYER_SCORE + 4
+          sta PLAYER_SCORE + 5
+          sta PLAYER_SCORE + 6
+          sta PLAYER_SCORE + 7
           
           ;setup level
           lda #$0b
@@ -1603,8 +1608,11 @@ IrqInGame
           
 
 !ifdef MUSIC_PLAYING{
+          lda UPDATE_MUSIC
+          beq +
           ;play music
           jsr MUSIC_PLAYER + 3
++          
 }
 
           ;acknowledge VIC irq
@@ -1648,7 +1656,10 @@ IrqSetTextMode
           sta VIC_MEMORY_CONTROL
     
 !ifdef MUSIC_PLAYING{
+          lda UPDATE_MUSIC
+          beq +
           jsr MUSIC_PLAYER + 3
++          
 }
           jmp $ea81
 
@@ -2299,7 +2310,7 @@ HighScoreDirect
           sty PARAM2
           
 .CheckNextDigit          
-          lda SCREEN_CHAR + ( 23 * 40 + 8 ),x
+          lda PLAYER_SCORE,x
           cmp HIGHSCORE_SCORE,y
           bcc .NotHigher
           bne .IsHigher
@@ -2370,7 +2381,7 @@ HighScoreDirect
           ldx #0
           
 .SetNextScoreDigit          
-          lda SCREEN_CHAR + ( 23 * 40 + 8 ),x
+          lda PLAYER_SCORE,x
           sta HIGHSCORE_SCORE,y
           
           iny
@@ -4433,8 +4444,7 @@ ObjectMoveLeft
 .NoCharStep
           dec SPRITE_CHAR_POS_X_DELTA,x
           
-          jsr MoveSpriteLeft
-          rts
+          jmp MoveSpriteLeft
           
           
 ;------------------------------------------------------------
@@ -4759,7 +4769,6 @@ ObjectWalkOrJumpLeft
           
 .Blocked          
           rts
-
 
           
           
@@ -13511,6 +13520,7 @@ IncreaseScore
           
 .IncreaseDigit          
           inc SCREEN_CHAR + ( 23 * 40 + 8 ),x
+          inc PLAYER_SCORE,x
           lda SCREEN_CHAR + ( 23 * 40 + 8 ),x
           cmp #58
           bne .IncreaseBy1Done
@@ -13518,6 +13528,7 @@ IncreaseScore
           ;looped digit, increase next
           lda #48
           sta SCREEN_CHAR + ( 23 * 40 + 8 ),x
+          sta PLAYER_SCORE,x
           dex
           ;TODO - this might overflow
           jmp .IncreaseDigit
@@ -13957,6 +13968,8 @@ LoadScores
 SaveScores
           lda #$0b
           sta VIC_CONTROL_MODE
+          lda #0
+          sta UPDATE_MUSIC
 
           ;delete old save file first
           lda #HIGHSCORE_DELETE_FILENAME_END - HIGHSCORE_DELETE_FILENAME
@@ -14021,6 +14034,8 @@ SaveScores
           ;if carry set, a save error has happened
           ;bcs .SaveError    
           
+          lda #1
+          sta UPDATE_MUSIC
           lda #$1b
           sta VIC_CONTROL_MODE
           rts
@@ -15204,6 +15219,8 @@ BOSS_DELTA_TABLE_X
 BOSS_DELTA_TABLE_Y          
           !byte 0, $ff, 0, $ff, $ff, 0, $ff, 0
           !byte 0, 1, 0, 1, 1, 0, 1, 0
+PLAYER_SCORE
+          !byte 0,0,0,0,0,0,0,0
           
 TWO_PLAYER_MODE_ACTIVE
           !byte 0
@@ -15214,6 +15231,8 @@ SPAWN_LEFT_BORDER
           !byte 10
 SPAWN_RIGHT_BORDER
           !byte 30
+UPDATE_MUSIC
+          !byte 1
           
 !source "level_data.asm"
 

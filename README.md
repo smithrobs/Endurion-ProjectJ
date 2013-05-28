@@ -3,6 +3,7 @@ Project J/Supernatural/Guns 'n' Ghosts by _endurion_
 Back in February 2011, endurion started a tutorial for a new C64 game under the title of **Project J**. Almost exactly two
 years passed, and after 99 steps the tutorial was declared complete. The resulting game **Supernatural** was polished and
 released commercially as **Guns 'n' Ghosts** which you can [purchase here.](http://www.psytronik.net/main/index.php?option=com_content&view=article&id=105%3Agunsghosts&catid=34%3Acommodore-64&Itemid=57)
+You may also purchase a physical cartridge via [here.](http://www.rgcd.co.uk/2013/04/guns-n-ghosts-cartridge-available-c64.html)
 
 I (smithrobs) wanted to visualize the progression of the tutorial and ended up scraping the steps from the original thread
 located at [RetroRemakes](http://www.retroremakes.com/remaketalk/index.php?p=/discussion/2391/how-to-write-a-c64-game-in-several-steps/p1).
